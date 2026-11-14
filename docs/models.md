@@ -1,26 +1,24 @@
 # Models and JSON schema version 1
 
-Foundation implements the root `rootfsdiff` package's models, `Validate` methods,
+The root `rootfsdiff` package provides models, `Validate` methods,
 `ScanOptions.WithDefaults`, `ValidatePath`, `MetadataExclusions`, and typed errors.
-The [behavior contract](v0.1-contract.md) remains the semantic reference. No
-scanner, comparison, policy parser/evaluator, renderer or command is implemented
-by foundation.
+The [behavior contract](v0.1-contract.md) remains the semantic reference.
 
 ## Component boundaries
 
-The scanner owner implements:
+Scanning exposes:
 
 ```go
 Scan(ctx context.Context, r io.Reader, opts ScanOptions) (Manifest, error)
 ```
 
-The comparison owner implements:
+Comparison exposes:
 
 ```go
 Compare(before, after Manifest, opts CompareOptions) (Diff, error)
 ```
 
-The policy owner implements:
+Policy operations expose:
 
 ```go
 ParsePolicy(r io.Reader) (Policy, error)
@@ -31,9 +29,9 @@ The public `report` package imports root `rootfsdiff` and implements
 `Write(io.Writer, rootfsdiff.Report, Format) error`, with string formats `text`,
 `json`, and `markdown`. Core never imports it. `internal/cli` owns an injectable
 `Run` function, process diagnostics and exit-code selection;
-`cmd/rootfs-diff/main.go` is the thin process entry point. Those owners supply
-runnable component examples when the implementations exist. Current model/schema
-examples are compiled and executed by `go test ./...`.
+`cmd/rootfs-diff/main.go` is the thin process entry point. Public component and
+[complete library examples](../examples/library/README.md) compile and execute
+under `go test ./...`.
 
 Core operations must validate caller-built inputs, avoid mutation, printing and
 exits, and retain underlying errors. The scanner does not close its caller-owned
@@ -56,8 +54,8 @@ numbers and negative unsigned modes fail during Go JSON decoding.
 Canonical model paths are nonempty UTF-8 POSIX root-relative strings with no
 empty, `.` or `..` segment. They have no leading or trailing slash. Backslash,
 glob characters and control characters are literal filename data. Model
-validation imposes no default scan length cap; the scanner validates its final
-decoded paths against the selected options. Symlink targets are arbitrary valid
+validation imposes no default scan length cap; the scanner validates decoded
+paths against the selected options before normalization. Symlink targets are arbitrary valid
 UTF-8 preserved verbatim, including absolute paths, `..` and an empty target.
 Hardlink targets must be canonical paths.
 
@@ -97,7 +95,7 @@ ignore rules or required policy paths are accepted and have no extra effect.
 including reusable definitions for models. Go `Validate` additionally checks
 cross-field consistency, ordering, uniqueness, hardlinks and arithmetic. Ordinary
 `encoding/json` decoding is not a strict policy parser or a substitute for
-validation; `ParsePolicy` will enforce the contract's duplicate/unknown-key,
+validation; `ParsePolicy` enforces the contract's duplicate/unknown-key,
 trailing-input and 1 MiB restrictions. The structural schema rejects unknown
 fields; callers using Go decoding must separately control unknown fields if they
 need that property.

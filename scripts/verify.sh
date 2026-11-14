@@ -21,3 +21,4 @@ go test ./...
 build_dir=$(mktemp -d "${TMPDIR:-/tmp}/rootfs-diff-verify.XXXXXX")
 trap 'rm -rf "$build_dir"' EXIT HUP INT TERM
 go build -o "$build_dir/rootfs-diff" ./cmd/rootfs-diff
+go run ./examples/library > "$build_dir/library-report.json"

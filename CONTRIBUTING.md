@@ -1,37 +1,34 @@
 # Contributor setup
 
-Linux and macOS are supported hosts. Foundation pins Go **1.27.4**, the current
-stable version listed by the [official download feed](https://go.dev/dl/?mode=json)
-when implemented. The module minimum is Go **1.27.0**. `.go-version` pins the exact
+Linux and macOS are supported hosts. The repository pins Go **1.27.4**.
+The module minimum is Go **1.27.0**. `.go-version` pins the exact
 development version and `go.mod` requests `toolchain go1.27.4`.
 
 Install Go 1.27.4 from [go.dev/dl](https://go.dev/dl/), or let an existing Go
 installation download it once with `GOTOOLCHAIN=go1.27.4 go version`. Once the
 toolchain is installed, the checks below need no network. Runtime code and tests
 use only the standard library. No hardware, root access, Docker, mounting or host
-tar command is needed for routine tests. The later Buildroot proof has separate
+tar command is needed for routine tests. The separate Buildroot proof has its own
 Linux and download prerequisites.
 
-Authenticate GitHub for this private repository before cloning:
+Clone this public repository without authentication:
 
 ```sh
-gh auth login
-gh auth setup-git
 git clone https://github.com/Azhovan/rootfs-diff.git
 cd rootfs-diff
 go version
 ./scripts/verify.sh
 ```
 
-Library consumers need Git credentials with read access to this repository.
-Configure `GOPRIVATE=github.com/Azhovan/rootfs-diff` in the caller's environment
-before downloading the module, so Go bypasses the public module proxy and checksum
-database for this private path. Preserve other existing `GOPRIVATE` patterns. Do
-not embed tokens in URLs, source files or reports.
+Library consumers can fetch the public module normally from their own Go module:
 
 ```sh
-GOPRIVATE=github.com/Azhovan/rootfs-diff go get github.com/Azhovan/rootfs-diff@main
+go get github.com/Azhovan/rootfs-diff@main
 ```
+
+The upstream module needs no `GOPRIVATE` setting. For private copies or forks,
+see [private-module setup](docs/installation.md#private-copies-and-forks), including
+preserving existing effective patterns. Keep credentials out of URLs and source.
 
 Useful commands from the repository root:
 
@@ -46,9 +43,10 @@ GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local ./scripts/verify.sh
 
 The last command requires Go 1.27.0 or newer already installed; use the pinned
 1.27.4 for reproducible development. It proves checks do not fetch dependencies.
-The verification script checks formatting without modifying files. The CLI owner
-will add a real command build and subprocess checks when the CLI is delivered.
-Parser fuzz targets arrive with their parsers, not as placeholders in foundation.
+The verification script checks formatting without modifying files, runs vet and
+tests (including public examples and executable subprocess tests), builds the CLI
+and runs the complete library example. See [CI and full checks](docs/ci.md#repository-verification)
+for race, bounded fuzz and four cross-build commands.
 
 `bin/`, `tmp/`, `artifacts/`, `coverage.out` and `*.test` are ignored locations for
 local outputs. Do not commit generated images, toolchains or build trees.

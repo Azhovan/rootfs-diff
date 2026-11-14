@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.27.4'
+          cache: false
+      - name: Toolchain
+        run: go version
+      - name: Offline verification
+        env:
+          GOPROXY: 'off'
+          GOSUMDB: 'off'
+          GOTOOLCHAIN: local
+        run: ./scripts/verify.sh
+      - name: Race checks
+        env:
+          GOPROXY: 'off'
+          GOSUMDB: 'off'
+          GOTOOLCHAIN: local
+        run: go test -race ./...
+      - name: Bounded parser fuzzing
+        if: runner.os == 'Linux'
+        env:
+          GOPROXY: 'off'
+          GOSUMDB: 'off'
+          GOTOOLCHAIN: local
+          GOMAXPROCS: '2'
+        run: |
+          go test . -run='^$' -fuzz=FuzzScan -fuzztime=30s
+          go test . -run='^$' -fuzz=FuzzParsePolicy -fuzztime=30s
+      - name: CGO-free cross-builds
+        if: runner.os == 'Linux'
+        env:
+          GOPROXY: 'off'
+          GOSUMDB: 'off'
+          GOTOOLCHAIN: local
+          CGO_ENABLED: '0'
+        shell: bash
+        run: |
+          build_dir=$(mktemp -d)
+          trap 'rm -rf "$build_dir"' EXIT
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            GOOS=${target%/*} GOARCH=${target#*/} go build -o "$build_dir/rootfs-diff-${target//\//-}" ./cmd/rootfs-diff
+          done
