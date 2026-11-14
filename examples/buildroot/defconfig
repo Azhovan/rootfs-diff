@@ -1,0 +1,5 @@
+BR2_aarch64=y
+BR2_TOOLCHAIN_BUILDROOT_MUSL=y
+BR2_REPRODUCIBLE=y
+BR2_TARGET_ROOTFS_TAR=y
+BR2_ROOTFS_POST_BUILD_SCRIPT="/tmp/rootfs-diff-buildroot/recipe/post-build.sh"

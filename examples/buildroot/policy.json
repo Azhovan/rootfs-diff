@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "required_paths": ["etc/init.d/S99rootfs-diff-demo"],
+  "max_total_growth_bytes": 1
+}
