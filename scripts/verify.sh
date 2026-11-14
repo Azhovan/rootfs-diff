@@ -17,4 +17,7 @@ fi
 go vet ./...
 go test ./...
 
-# The CLI owner adds the real command build and subprocess tests when landed.
+# Keep the build outside the checkout and remove it even on interruption.
+build_dir=$(mktemp -d "${TMPDIR:-/tmp}/rootfs-diff-verify.XXXXXX")
+trap 'rm -rf "$build_dir"' EXIT HUP INT TERM
+go build -o "$build_dir/rootfs-diff" ./cmd/rootfs-diff
