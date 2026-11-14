@@ -8,8 +8,9 @@ Install Go 1.27.4 from [go.dev/dl](https://go.dev/dl/), or let an existing Go
 installation download it once with `GOTOOLCHAIN=go1.27.4 go version`. Once the
 toolchain is installed, the checks below need no network. Runtime code and tests
 use only the standard library. No hardware, root access, Docker, mounting or host
-tar command is needed for routine tests. The separate Buildroot proof has its own
-Linux and download prerequisites.
+tar command is needed for routine tests. The [Buildroot demonstration](examples/buildroot/README.md)
+has separate Linux/build/download prerequisites; the [synthetic example](examples/synthetic/README.md)
+provides a small reproducible comparison without a Buildroot build.
 
 Clone this public repository without authentication:
 

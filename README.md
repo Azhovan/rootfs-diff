@@ -45,7 +45,7 @@ Put flags before both filenames. Exit **0** means the comparison and enabled che
 - [Ordinary GitHub Actions usage](docs/ci.md), [troubleshooting](docs/troubleshooting.md)
 - [Contributor setup and local checks](CONTRIBUTING.md)
 
-The synthetic and pinned Buildroot demonstration recipes/results are tracked in [issue #8](https://github.com/Azhovan/rootfs-diff/issues/8). Their proof remains a separate acceptance gate; no executed Buildroot result is claimed here.
+The [synthetic example](examples/synthetic/README.md) provides a small reproducible comparison. The [pinned Buildroot demonstration](examples/buildroot/README.md) records an executed two-image archive comparison, its controlled changes, prerequisites and observed report. These demonstrations review recorded archive data; they do not establish bootability, runtime correctness or OTA compatibility.
 
 ## Scope
 

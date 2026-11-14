@@ -81,4 +81,4 @@ After installing Go 1.27.4 and cloning the repository, the fast checks can run w
 GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local ./scripts/verify.sh
 ```
 
-This requires the selected local toolchain to satisfy `go.mod`. The separately owned Buildroot demonstration has Linux/build/download prerequisites and is not part of the offline fast check; see [issue #8](https://github.com/Azhovan/rootfs-diff/issues/8) for recipe/results status. See [contributor setup](../CONTRIBUTING.md) and [private-access troubleshooting](troubleshooting.md#private-access).
+This requires the selected local toolchain to satisfy `go.mod`. The [pinned Buildroot demonstration](../examples/buildroot/README.md) has separate Linux/build/download prerequisites and is not part of the offline fast check. The [synthetic example](../examples/synthetic/README.md) provides a small reproducible comparison without building firmware. See [contributor setup](../CONTRIBUTING.md) and [private-access troubleshooting](troubleshooting.md#private-access).
