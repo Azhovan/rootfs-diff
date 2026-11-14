@@ -147,8 +147,12 @@ than limit; report actual must equal summary net growth. Evaluation checks the
 complete candidate manifest for required paths, regardless of comparison ignores.
 
 Warnings use `source`, `path`, `code`, `key`. Code is `uncompared_metadata`; key is
-nonempty valid UTF-8 and no value is recorded. Manifest sources are empty strings,
-and each warning identifies an explicit entry. Comparison/report sources are
+nonempty valid UTF-8 and no value is recorded. A warning path is canonical, with
+one warning-only exception: `.` identifies metadata on an ignored root directory
+record. Root warnings remain even though no root entry is retained or synthesized.
+All actual entry, hardlink target, ignore and required-path rules are unchanged;
+`.` is invalid for those paths. Manifest sources are empty strings, and each
+nonroot warning identifies an explicit entry. Comparison/report sources are
 `before` or `after` even for ignored paths. Output warnings sort uniquely by path,
 code, key, source using Go string order (`after` precedes `before` on a final tie).
 Warnings do not prove runtime consequences.
@@ -177,6 +181,9 @@ renderers must escape untrusted control characters and Markdown/HTML syntax.
 - [Valid manifest](../testdata/models/valid-manifest.json): all seven entry kinds,
   numeric IDs/special modes, two forward hardlink aliases, a verbatim symlink
   target and an uncompared-metadata warning.
+- [Root warning manifest](../testdata/models/root-warning-manifest.json) and
+  [report](../testdata/models/root-warning-report-v1.json): root-record metadata
+  warnings are retained without inventing an entry, change or payload byte.
 - [Invalid manifests](../testdata/models/invalid-manifests.json): malformed path,
   negative size, unknown kind, missing link, aggregate overflow and duplicate path.
 - [Policy](../testdata/models/policy-v1.json): version 1 with required paths and a

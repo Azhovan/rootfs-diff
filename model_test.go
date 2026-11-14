@@ -263,8 +263,56 @@ func TestPolicyWarningViolationValidation(t *testing.T) {
 	}
 }
 
+func TestIgnoredRootMetadataWarnings(t *testing.T) {
+	m := readModel[rd.Manifest](t, "root-warning-manifest.json")
+	if err := m.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Entries) != 0 || len(m.Warnings) != 1 || m.Warnings[0].Path != "." {
+		t.Fatal("root warning must not require or synthesize a root entry")
+	}
+	encoded, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := os.ReadFile("testdata/models/root-warning-manifest.json")
+	if err != nil || !bytes.Equal(append(encoded, '\n'), want) {
+		t.Fatalf("root warning manifest round trip differs: %s, %v", encoded, err)
+	}
+	// The exception is exact and confined to warnings. Entry and option paths
+	// still use canonical nonroot rules, including hardlink/policy paths.
+	assertInvalid(t, (rd.Entry{Path: ".", Kind: rd.KindDirectory}).Validate())
+	assertInvalid(t, alias("alias", ".").Validate())
+	assertInvalid(t, (rd.CompareOptions{IgnorePaths: []string{"."}}).Validate())
+	assertInvalid(t, (rd.CompareOptions{IgnorePrefixes: []string{"."}}).Validate())
+	assertInvalid(t, (rd.Policy{SchemaVersion: 1, RequiredPaths: []string{"."}}).Validate())
+	for _, path := range []string{"", "./", "/", "./file"} {
+		w := m.Warnings[0]
+		w.Path = path
+		assertInvalid(t, w.Validate())
+	}
+	for _, mutate := range []func(*rd.Warning){
+		func(w *rd.Warning) { w.Source = rd.SourceBefore },
+		func(w *rd.Warning) { w.Key = string([]byte{0xff}) },
+	} {
+		w := m.Warnings[0]
+		mutate(&w)
+		assertInvalid(t, (rd.Manifest{Warnings: []rd.Warning{w}}).Validate())
+	}
+	assertInvalid(t, (rd.Manifest{Warnings: []rd.Warning{m.Warnings[0], m.Warnings[0]}}).Validate())
+	r := readModel[rd.Report](t, "root-warning-report-v1.json")
+	if err := r.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Changes) != 0 || r.Summary != (rd.Summary{}) || len(r.Warnings) != 2 || r.Warnings[0].Source != rd.SourceAfter || r.Warnings[1].Source != rd.SourceBefore {
+		t.Fatal("root warnings must keep both sources without adding entries, changes or payload")
+	}
+	r.Warnings[0].Source = ""
+	assertInvalid(t, r.Validate())
+}
+
 func TestModelJSONRoundTrip(t *testing.T) {
-	for _, name := range []string{"report-v1.json", "empty-report-v1.json"} {
+	for _, name := range []string{"report-v1.json", "empty-report-v1.json", "root-warning-report-v1.json"} {
 		t.Run(name, func(t *testing.T) {
 			r := readModel[rd.Report](t, name)
 			if err := r.Validate(); err != nil {

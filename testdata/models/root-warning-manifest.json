@@ -1,0 +1,11 @@
+{
+  "entries": [],
+  "warnings": [
+    {
+      "source": "",
+      "path": ".",
+      "code": "uncompared_metadata",
+      "key": "VENDOR.root-note"
+    }
+  ]
+}

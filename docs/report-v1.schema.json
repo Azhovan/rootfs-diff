@@ -427,7 +427,14 @@
           ]
         },
         "path": {
-          "$ref": "#/$defs/path"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/path"
+            },
+            {
+              "const": "."
+            }
+          ]
         },
         "code": {
           "const": "uncompared_metadata"

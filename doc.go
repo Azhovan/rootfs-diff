@@ -12,6 +12,8 @@
 // Complete manifests validate hardlink closure. Individual change entries need
 // not include their target because comparison ignores can remove that target.
 // Nil model slices marshal as empty arrays, and absent change sides as null.
+// Warning path "." preserves metadata warnings on an ignored root directory
+// record without retaining or synthesizing a root entry.
 //
 // Core functions never extract or execute archive contents. The planned Scan
 // accepts a caller-owned io.Reader and does not close it. Context cancellation

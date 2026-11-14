@@ -111,6 +111,7 @@ const (
 
 // Warning identifies a metadata key, never its value. Manifest warnings have
 // empty Source; comparison/report warnings have a before or after Source.
+// Path is canonical, except "." identifies an ignored root directory record.
 type Warning struct {
 	Source WarningSource `json:"source"`
 	Path   string        `json:"path"`
@@ -119,8 +120,10 @@ type Warning struct {
 }
 
 func (w Warning) Validate() error {
-	if err := ValidatePath(w.Path); err != nil {
-		return err
+	if w.Path != "." {
+		if err := ValidatePath(w.Path); err != nil {
+			return err
+		}
 	}
 	if w.Code != WarningUncomparedMetadata || w.Key == "" || !utf8.ValidString(w.Key) {
 		return invalid("validate warning", w.Path, "expected uncompared_metadata with a nonempty UTF-8 key")
@@ -216,8 +219,8 @@ func (m Manifest) Validate() error {
 			return invalid("validate manifest", w.Path, "warnings must be unique and have no source")
 		}
 		seenWarnings[w] = true
-		if _, ok := entries[w.Path]; !ok {
-			return invalid("validate manifest", w.Path, "warning must identify an explicit entry")
+		if _, ok := entries[w.Path]; !ok && w.Path != "." {
+			return invalid("validate manifest", w.Path, "warning must identify an explicit entry or ignored root directory")
 		}
 	}
 	return nil
