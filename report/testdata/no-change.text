@@ -1,0 +1,25 @@
+rootfs-diff report (schema 1)
+
+Summary:
+  Entries: before 1, after 1
+  Changes: added 0, removed 0, modified 0, unchanged 1
+  Regular payload: before 2 bytes, after 2 bytes, net +0 bytes
+
+Payload totals count retained regular entries only, excluding hardlink aliases; they are not filesystem or flash usage.
+
+Positive growth (showing 0 of 0):
+  None.
+
+Changes (0):
+  None.
+
+Policy violations (0):
+  None recorded.
+
+Warnings (0):
+  None recorded.
+
+Metadata exclusions:
+  acls, directory_sizes, file_capabilities, selinux_labels, timestamps, unrecognized_pax_metadata, user_group_names, xattrs
+
+These metadata are not compared. No changes does not establish firmware equivalence, bootability, compatibility, or security.

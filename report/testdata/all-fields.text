@@ -1,0 +1,50 @@
+rootfs-diff report (schema 1)
+
+Summary:
+  Entries: before 6, after 6
+  Changes: added 1, removed 1, modified 5, unchanged 0
+  Regular payload: before 12 bytes, after 6 bytes, net -6 bytes
+
+Payload totals count retained regular entries only, excluding hardlink aliases; they are not filesystem or flash usage.
+
+Positive growth (showing 0 of 0):
+  None.
+
+Changes (7):
+  modified "block"
+    Changed fields: kind, mode, uid, gid, device_major, device_minor
+    Before: kind=char_device mode=0600 uid=-2 gid=4 device_major=1 device_minor=3
+    After: kind=block_device mode=01640 uid=3 gid=5 device_major=8 device_minor=9
+  added "dir"
+    Before: absent
+    After: kind=directory mode=01777 uid=10 gid=20
+  removed "fifo"
+    Before: kind=fifo mode=0660 uid=30 gid=40
+    After: absent
+  modified "hard"
+    Changed fields: mode, uid, gid, size, sha256, link_target
+    Before: kind=hardlink mode=0644 uid=1 gid=2 size=5 sha256="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" link_target="old"
+    After: kind=hardlink mode=06750 uid=-1 gid=-2 size=8 sha256="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" link_target="new"
+  modified "reg"
+    Changed fields: size, sha256
+    Before: kind=regular mode=0644 uid=0 gid=0 size=10 sha256="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    After: kind=regular mode=0644 uid=0 gid=0 size=6 sha256="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  modified "sym"
+    Changed fields: link_target
+    Before: kind=symlink mode=0777 uid=0 gid=0 link_target="old"
+    After: kind=symlink mode=0777 uid=0 gid=0 link_target="new"
+  modified "type"
+    Changed fields: kind, mode, size, sha256, link_target
+    Before: kind=regular mode=0644 uid=0 gid=0 size=2 sha256="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    After: kind=symlink mode=0777 uid=0 gid=0 link_target="../reg"
+
+Policy violations (0):
+  None recorded.
+
+Warnings (0):
+  None recorded.
+
+Metadata exclusions:
+  acls, directory_sizes, file_capabilities, selinux_labels, timestamps, unrecognized_pax_metadata, user_group_names, xattrs
+
+These metadata are not compared. No changes does not establish firmware equivalence, bootability, compatibility, or security.
