@@ -303,6 +303,15 @@ func FuzzScan(f *testing.F) {
 	f.Add(pax)
 	f.Add(gnu)
 	f.Add(append(append([]byte(nil), pax[:1024]...), pax...))
+	badPAX, err := testfixture.Tar(testfixture.Entry{Header: tar.Header{
+		Name: "file", Typeflag: tar.TypeReg, Format: tar.FormatPAX,
+		PAXRecords: map[string]string{"vvv": "not-a-number", "VENDOR.hidden": "opaque"},
+	}})
+	if err != nil {
+		f.Fatal(err)
+	}
+	badPAX = bytes.ReplaceAll(badPAX, []byte("vvv="), []byte("uid="))
+	f.Add(append(append([]byte(nil), badPAX[:1024]...), pax...))
 	opts := rootfsdiff.ScanOptions{MaxEntries: 8, MaxArchiveBytes: 128 << 10, MaxFileBytes: 16 << 10, MaxPathBytes: 256}
 	f.Fuzz(func(t *testing.T, input []byte) {
 		if len(input) > 64<<10 {

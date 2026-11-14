@@ -447,6 +447,52 @@ func TestScanEveryPAXExtensionIsAudited(t *testing.T) {
 	}
 }
 
+func TestScanAuditRejectsFailedPAXMerge(t *testing.T) {
+	second := scanArchive(t, testfixture.Entry{Header: tar.Header{Name: "file", Typeflag: tar.TypeReg, Format: tar.FormatPAX, PAXRecords: map[string]string{"VENDOR.second": "second"}}})
+	for _, field := range []string{"uid", "gid", "size", "mtime", "atime", "ctime"} {
+		for _, key := range []string{"GNU.sparse.major", "VENDOR.ba\xff", "VENDOR.first"} {
+			t.Run(field+"/"+fmt.Sprintf("%q", key), func(t *testing.T) {
+				// Use equal-length vendor placeholders because tar.Writer omits
+				// standard PAX fields that conflict with its Header values.
+				fieldPlaceholder := strings.Repeat("n", len(field))
+				keyPlaceholder := strings.Repeat("v", len(key))
+				first := scanArchive(t, testfixture.Entry{Header: tar.Header{Name: "file", Typeflag: tar.TypeReg, Format: tar.FormatPAX, PAXRecords: map[string]string{
+					fieldPlaceholder: "not-a-number", keyPlaceholder: "2",
+				}}})
+				first = bytes.ReplaceAll(first, []byte(fieldPlaceholder+"="), []byte(field+"="))
+				first = bytes.ReplaceAll(first, []byte(keyPlaceholder+"="), []byte(key+"="))
+				input := append(append([]byte(nil), first[:1024]...), second...)
+				err := scanFails(t, input, diff.ScanOptions{}, diff.ErrInvalidInput)
+				if strings.Contains(err.Error(), "not-a-number") {
+					t.Fatal("error leaked metadata value")
+				}
+			})
+		}
+	}
+}
+
+func TestScanAuditAcceptsEmptyPAXMapsAndValues(t *testing.T) {
+	entry := scanArchive(t, scanEntry("file", tar.TypeReg, ""))
+	// An empty x header still decodes to a non-nil, empty PAX map.
+	empty := scanArchive(t, scanEntry("extension", tar.TypeReg, ""))
+	empty = patchTarHeader(t, empty, func(h []byte) { h[156] = tar.TypeXHeader })
+	scanOK(t, append(append([]byte(nil), empty[:512]...), entry...), diff.ScanOptions{})
+	for _, key := range []string{"uid", "gid", "size", "mtime", "atime", "ctime", "VENDOR.empty"} {
+		placeholder := strings.Repeat("v", len(key))
+		first := scanArchive(t, testfixture.Entry{Header: tar.Header{Name: "file", Typeflag: tar.TypeReg, Format: tar.FormatPAX, PAXRecords: map[string]string{placeholder: ""}}})
+		first = bytes.ReplaceAll(first, []byte(placeholder+"="), []byte(key+"="))
+		m := scanOK(t, append(append([]byte(nil), first[:1024]...), entry...), diff.ScanOptions{})
+		if key == "VENDOR.empty" {
+			want := []diff.Warning{{Path: "file", Code: diff.WarningUncomparedMetadata, Key: key}}
+			if !reflect.DeepEqual(m.Warnings, want) {
+				t.Fatalf("empty metadata warning = %#v", m.Warnings)
+			}
+		} else if len(m.Warnings) != 0 {
+			t.Fatalf("standard empty value produced warning: %#v", m.Warnings)
+		}
+	}
+}
+
 func TestScanMalformedDeflateHasTypedCategory(t *testing.T) {
 	// Fixed gzip header followed by reserved DEFLATE block type 3.
 	input := []byte{0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 255, 0x06, 0, 0, 0, 0, 0, 0, 0, 0}

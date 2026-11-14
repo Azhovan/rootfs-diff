@@ -112,6 +112,13 @@ func (r *scanRecordReader) auditPAX() error {
 	if err != nil && err != tar.ErrInsecurePath {
 		return err
 	}
+	// archive/tar's global-header branch suppresses mergePAX errors. The
+	// parsed map is assigned only on a successful merge; even an empty PAX
+	// body produces a non-nil map. Reject the suppressed failure so invalid
+	// numeric/time fields cannot hide other metadata in a discarded header.
+	if h.PAXRecords == nil {
+		return invalid("scan PAX metadata", "", "invalid standard PAX numeric or timestamp field")
+	}
 	warnings := make(map[Warning]struct{})
 	if err := scanMetadata(h, "", warnings); err != nil {
 		return err
