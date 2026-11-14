@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "summary": {
+    "before_entries": 0,
+    "after_entries": 0,
+    "added": 0,
+    "removed": 0,
+    "modified": 0,
+    "unchanged": 0,
+    "before_payload_bytes": 0,
+    "after_payload_bytes": 0,
+    "net_growth_bytes": 0
+  },
+  "changes": [],
+  "positive_growth": [],
+  "violations": [],
+  "warnings": [],
+  "metadata_exclusions": [
+    "acls",
+    "directory_sizes",
+    "file_capabilities",
+    "selinux_labels",
+    "timestamps",
+    "unrecognized_pax_metadata",
+    "user_group_names",
+    "xattrs"
+  ]
+}

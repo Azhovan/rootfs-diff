@@ -1,0 +1,670 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Azhovan/rootfs-diff/blob/main/docs/report-v1.schema.json",
+  "title": "rootfs-diff report schema version 1",
+  "description": "Structural constraints. Go Validate additionally enforces field applicability, paths, ordering, uniqueness, hardlink closure, checked totals and cross-field consistency. JSON must be valid UTF-8.",
+  "$ref": "#/$defs/report",
+  "$defs": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^/]+(?:/[^/]+)*(?![\\s\\S])",
+      "not": {
+        "pattern": "(^|/)\\.{1,2}(/|(?![\\s\\S]))"
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "kind",
+        "mode",
+        "uid",
+        "gid",
+        "size",
+        "sha256",
+        "link_target",
+        "device_major",
+        "device_minor"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "kind": {
+          "enum": [
+            "regular",
+            "directory",
+            "symlink",
+            "hardlink",
+            "char_device",
+            "block_device",
+            "fifo"
+          ]
+        },
+        "mode": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4095
+        },
+        "uid": {
+          "type": "integer",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        },
+        "gid": {
+          "type": "integer",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "link_target": {
+          "type": "string"
+        },
+        "device_major": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "device_minor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "regular",
+                  "hardlink"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "minLength": 64,
+                "maxLength": 64
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "size": {
+                "const": 0
+              },
+              "sha256": {
+                "const": ""
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "char_device",
+                  "block_device"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "device_major": {
+                "const": 0
+              },
+              "device_minor": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "hardlink"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "link_target": {
+                "$ref": "#/$defs/path"
+              }
+            }
+          },
+          "else": {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "symlink"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "link_target": {
+                  "const": ""
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entries",
+        "warnings"
+      ],
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/entry"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/warning"
+              },
+              {
+                "properties": {
+                  "source": {
+                    "const": ""
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "kind",
+        "before",
+        "after",
+        "changed_fields"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "kind": {
+          "enum": [
+            "added",
+            "removed",
+            "modified"
+          ]
+        },
+        "before": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/entry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "after": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/entry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "changed_fields": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "kind",
+              "mode",
+              "uid",
+              "gid",
+              "size",
+              "sha256",
+              "link_target",
+              "device_major",
+              "device_minor"
+            ]
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "added"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "before": {
+                "type": "null"
+              },
+              "after": {
+                "$ref": "#/$defs/entry"
+              },
+              "changed_fields": {
+                "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "removed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "before": {
+                "$ref": "#/$defs/entry"
+              },
+              "after": {
+                "type": "null"
+              },
+              "changed_fields": {
+                "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "modified"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "before": {
+                "$ref": "#/$defs/entry"
+              },
+              "after": {
+                "$ref": "#/$defs/entry"
+              },
+              "changed_fields": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "before_entries",
+        "after_entries",
+        "added",
+        "removed",
+        "modified",
+        "unchanged",
+        "before_payload_bytes",
+        "after_payload_bytes",
+        "net_growth_bytes"
+      ],
+      "properties": {
+        "before_entries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "after_entries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "added": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "removed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "modified": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "unchanged": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "before_payload_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "after_payload_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "net_growth_bytes": {
+          "type": "integer",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        }
+      }
+    },
+    "growth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "bytes"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        }
+      }
+    },
+    "warning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "path",
+        "code",
+        "key"
+      ],
+      "properties": {
+        "source": {
+          "enum": [
+            "",
+            "before",
+            "after"
+          ]
+        },
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "code": {
+          "const": "uncompared_metadata"
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "violation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule",
+        "path",
+        "limit",
+        "actual"
+      ],
+      "properties": {
+        "rule": {
+          "enum": [
+            "required_path",
+            "max_total_growth_bytes"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "limit": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9223372036854775807
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "actual": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9223372036854775807
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "rule": {
+                "const": "required_path"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "path": {
+                "$ref": "#/$defs/path"
+              },
+              "limit": {
+                "type": "null"
+              },
+              "actual": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "path": {
+                "const": ""
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9223372036854775807
+              },
+              "actual": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9223372036854775807
+              }
+            }
+          }
+        }
+      ]
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "required_paths"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "required_paths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/path"
+          }
+        },
+        "max_total_growth_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        }
+      }
+    },
+    "diff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "changes",
+        "positive_growth",
+        "warnings"
+      ],
+      "properties": {
+        "summary": {
+          "$ref": "#/$defs/summary"
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/change"
+          }
+        },
+        "positive_growth": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/growth"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/warning"
+              },
+              {
+                "properties": {
+                  "source": {
+                    "enum": [
+                      "before",
+                      "after"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "summary",
+        "changes",
+        "positive_growth",
+        "violations",
+        "warnings",
+        "metadata_exclusions"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "summary": {
+          "$ref": "#/$defs/summary"
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/change"
+          }
+        },
+        "positive_growth": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/growth"
+          }
+        },
+        "violations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/violation"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/warning"
+              },
+              {
+                "properties": {
+                  "source": {
+                    "enum": [
+                      "before",
+                      "after"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "metadata_exclusions": {
+          "const": [
+            "acls",
+            "directory_sizes",
+            "file_capabilities",
+            "selinux_labels",
+            "timestamps",
+            "unrecognized_pax_metadata",
+            "user_group_names",
+            "xattrs"
+          ]
+        }
+      }
+    }
+  }
+}

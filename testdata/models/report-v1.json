@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "summary": {
+    "before_entries": 3,
+    "after_entries": 3,
+    "added": 1,
+    "removed": 1,
+    "modified": 1,
+    "unchanged": 1,
+    "before_payload_bytes": 8,
+    "after_payload_bytes": 9,
+    "net_growth_bytes": 1
+  },
+  "changes": [
+    {
+      "path": "etc/device.conf",
+      "kind": "modified",
+      "before": {
+        "path": "etc/device.conf",
+        "kind": "regular",
+        "mode": 416,
+        "uid": 0,
+        "gid": 0,
+        "size": 2,
+        "sha256": "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4",
+        "link_target": "",
+        "device_major": 0,
+        "device_minor": 0
+      },
+      "after": {
+        "path": "etc/device.conf",
+        "kind": "regular",
+        "mode": 3560,
+        "uid": 0,
+        "gid": 0,
+        "size": 4,
+        "sha256": "7aa7a5359173d05b63cfd682e3c38487f3cb4f7f1d60659fe59fab1505977d4c",
+        "link_target": "",
+        "device_major": 0,
+        "device_minor": 0
+      },
+      "changed_fields": [
+        "mode",
+        "size",
+        "sha256"
+      ]
+    },
+    {
+      "path": "etc/new",
+      "kind": "added",
+      "before": null,
+      "after": {
+        "path": "etc/new",
+        "kind": "regular",
+        "mode": 420,
+        "uid": 0,
+        "gid": 0,
+        "size": 2,
+        "sha256": "2689367b205c16ce32ed4200942b8b8b1e262dfc70d9bc9fbc77c49699a4f1df",
+        "link_target": "",
+        "device_major": 0,
+        "device_minor": 0
+      },
+      "changed_fields": []
+    },
+    {
+      "path": "obsolete",
+      "kind": "removed",
+      "before": {
+        "path": "obsolete",
+        "kind": "regular",
+        "mode": 420,
+        "uid": 0,
+        "gid": 0,
+        "size": 3,
+        "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "link_target": "",
+        "device_major": 0,
+        "device_minor": 0
+      },
+      "after": null,
+      "changed_fields": []
+    }
+  ],
+  "positive_growth": [
+    {
+      "path": "etc/device.conf",
+      "bytes": 2
+    },
+    {
+      "path": "etc/new",
+      "bytes": 2
+    }
+  ],
+  "violations": [
+    {
+      "rule": "max_total_growth_bytes",
+      "path": "",
+      "limit": 0,
+      "actual": 1
+    },
+    {
+      "rule": "required_path",
+      "path": "usr/bin/agent",
+      "limit": null,
+      "actual": null
+    }
+  ],
+  "warnings": [
+    {
+      "source": "after",
+      "path": "etc/device.conf",
+      "code": "uncompared_metadata",
+      "key": "SCHILY.xattr.security.capability"
+    },
+    {
+      "source": "before",
+      "path": "etc/device.conf",
+      "code": "uncompared_metadata",
+      "key": "SCHILY.xattr.security.capability"
+    }
+  ],
+  "metadata_exclusions": [
+    "acls",
+    "directory_sizes",
+    "file_capabilities",
+    "selinux_labels",
+    "timestamps",
+    "unrecognized_pax_metadata",
+    "user_group_names",
+    "xattrs"
+  ]
+}

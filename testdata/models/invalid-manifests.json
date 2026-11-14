@@ -1,0 +1,146 @@
+[
+  {
+    "name": "noncanonical path",
+    "manifest": {
+      "entries": [
+        {
+          "path": "etc/./config",
+          "kind": "regular",
+          "mode": 420,
+          "uid": 0,
+          "gid": 0,
+          "size": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "link_target": "",
+          "device_major": 0,
+          "device_minor": 0
+        }
+      ],
+      "warnings": []
+    }
+  },
+  {
+    "name": "negative size",
+    "manifest": {
+      "entries": [
+        {
+          "path": "file",
+          "kind": "regular",
+          "mode": 420,
+          "uid": 0,
+          "gid": 0,
+          "size": -1,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "link_target": "",
+          "device_major": 0,
+          "device_minor": 0
+        }
+      ],
+      "warnings": []
+    }
+  },
+  {
+    "name": "unknown kind",
+    "manifest": {
+      "entries": [
+        {
+          "path": "file",
+          "kind": "socket",
+          "mode": 420,
+          "uid": 0,
+          "gid": 0,
+          "size": 0,
+          "sha256": "",
+          "link_target": "",
+          "device_major": 0,
+          "device_minor": 0
+        }
+      ],
+      "warnings": []
+    }
+  },
+  {
+    "name": "missing hardlink target",
+    "manifest": {
+      "entries": [
+        {
+          "path": "hardlink-a",
+          "kind": "hardlink",
+          "mode": 3561,
+          "uid": -1,
+          "gid": 1234,
+          "size": 3,
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "link_target": "hardlink-b",
+          "device_major": 0,
+          "device_minor": 0
+        }
+      ],
+      "warnings": []
+    }
+  },
+  {
+    "name": "payload total overflow",
+    "manifest": {
+      "entries": [
+        {
+          "path": "a",
+          "kind": "regular",
+          "mode": 420,
+          "uid": 0,
+          "gid": 0,
+          "size": 9223372036854775807,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "link_target": "",
+          "device_major": 0,
+          "device_minor": 0
+        },
+        {
+          "path": "b",
+          "kind": "regular",
+          "mode": 420,
+          "uid": 0,
+          "gid": 0,
+          "size": 1,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "link_target": "",
+          "device_major": 0,
+          "device_minor": 0
+        }
+      ],
+      "warnings": []
+    }
+  },
+  {
+    "name": "duplicate path",
+    "manifest": {
+      "entries": [
+        {
+          "path": "a",
+          "kind": "regular",
+          "mode": 420,
+          "uid": 0,
+          "gid": 0,
+          "size": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "link_target": "",
+          "device_major": 0,
+          "device_minor": 0
+        },
+        {
+          "path": "a",
+          "kind": "regular",
+          "mode": 420,
+          "uid": 0,
+          "gid": 0,
+          "size": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "link_target": "",
+          "device_major": 0,
+          "device_minor": 0
+        }
+      ],
+      "warnings": []
+    }
+  }
+]

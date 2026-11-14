@@ -1,0 +1,108 @@
+{
+  "entries": [
+    {
+      "path": "dev/block",
+      "kind": "block_device",
+      "mode": 432,
+      "uid": 0,
+      "gid": 0,
+      "size": 0,
+      "sha256": "",
+      "link_target": "",
+      "device_major": 8,
+      "device_minor": 1
+    },
+    {
+      "path": "dev/console",
+      "kind": "char_device",
+      "mode": 384,
+      "uid": 0,
+      "gid": 0,
+      "size": 0,
+      "sha256": "",
+      "link_target": "",
+      "device_major": 5,
+      "device_minor": 1
+    },
+    {
+      "path": "etc",
+      "kind": "directory",
+      "mode": 1517,
+      "uid": 0,
+      "gid": 0,
+      "size": 0,
+      "sha256": "",
+      "link_target": "",
+      "device_major": 0,
+      "device_minor": 0
+    },
+    {
+      "path": "hardlink-a",
+      "kind": "hardlink",
+      "mode": 3561,
+      "uid": -1,
+      "gid": 1234,
+      "size": 3,
+      "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      "link_target": "hardlink-b",
+      "device_major": 0,
+      "device_minor": 0
+    },
+    {
+      "path": "hardlink-b",
+      "kind": "hardlink",
+      "mode": 3561,
+      "uid": -1,
+      "gid": 1234,
+      "size": 3,
+      "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      "link_target": "usr/bin/tool",
+      "device_major": 0,
+      "device_minor": 0
+    },
+    {
+      "path": "pipe",
+      "kind": "fifo",
+      "mode": 932,
+      "uid": 0,
+      "gid": 0,
+      "size": 0,
+      "sha256": "",
+      "link_target": "",
+      "device_major": 0,
+      "device_minor": 0
+    },
+    {
+      "path": "symlink",
+      "kind": "symlink",
+      "mode": 511,
+      "uid": 0,
+      "gid": 0,
+      "size": 0,
+      "sha256": "",
+      "link_target": "/../target\t\u001b[31m",
+      "device_major": 0,
+      "device_minor": 0
+    },
+    {
+      "path": "usr/bin/tool",
+      "kind": "regular",
+      "mode": 3561,
+      "uid": -1,
+      "gid": 1234,
+      "size": 3,
+      "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      "link_target": "",
+      "device_major": 0,
+      "device_minor": 0
+    }
+  ],
+  "warnings": [
+    {
+      "source": "",
+      "path": "usr/bin/tool",
+      "code": "uncompared_metadata",
+      "key": "SCHILY.xattr.security.capability"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "required_paths": [
+    "etc/init.d/S40network",
+    "usr/bin/device-agent"
+  ],
+  "max_total_growth_bytes": 1048576
+}
