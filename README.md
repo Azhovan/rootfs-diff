@@ -40,7 +40,7 @@ For the Buildroot archive pair, this command exits with **code 1**, writes a com
 
 ## Install and quickstart
 
-Download [v0.1.1 binaries and checksums](https://github.com/Azhovan/rootfs-diff/releases/tag/v0.1.1), or build from source with Go **1.27.4**. The module requires at least Go **1.27.0**. Linux and macOS are supported on amd64 and arm64. Choose the binary for the computer running rootfs-diff, regardless of the firmware's CPU architecture. See the [installation guide](docs/installation.md) for binary, source and Go module setup.
+Download [v0.1.2 binaries and checksums](https://github.com/Azhovan/rootfs-diff/releases/tag/v0.1.2), or build from source with Go **1.27.4**. The module requires at least Go **1.27.0**. Linux and macOS are supported on amd64 and arm64. Choose the binary for the computer running rootfs-diff, regardless of the firmware's CPU architecture. See the [installation guide](docs/installation.md) for binary, source and Go module setup.
 
 ```sh
 git clone https://github.com/Azhovan/rootfs-diff.git
