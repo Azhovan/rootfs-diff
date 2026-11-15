@@ -1,6 +1,8 @@
 # Installation and module access
 
-Linux and macOS are supported hosts. Go **1.27.4** is pinned in `.go-version` and the `go.mod` toolchain directive; the minimum module version is **1.27.0**. Install the pinned toolchain from [go.dev/dl](https://go.dev/dl/) before offline use. An existing Go installation can download it once with:
+Linux and macOS are supported hosts. [v0.1.0](https://github.com/Azhovan/rootfs-diff/releases/tag/v0.1.0) provides prebuilt binaries for amd64 and arm64 on both hosts, with `SHA256SUMS`; choose the host OS/architecture and verify the matching archive's checksum using the release instructions. Using a prebuilt binary needs no Go installation.
+
+For source builds and Go library consumers, Go **1.27.4** is pinned in `.go-version` and the `go.mod` toolchain directive; the minimum module version is **1.27.0**. Install the pinned toolchain from [go.dev/dl](https://go.dev/dl/) before offline use. An existing Go installation can download it once with:
 
 ```sh
 GOTOOLCHAIN=go1.27.4 go version
@@ -26,17 +28,17 @@ go build -o ./bin/rootfs-diff ./cmd/rootfs-diff
 ./bin/rootfs-diff --help
 ```
 
-No release binaries are published by this work. The `bin/` directory is an ignored local output location. See [CLI reference](cli.md) for usage and exit codes.
+The `bin/` directory is an ignored local output location. See [CLI reference](cli.md) for usage and exit codes. Release binaries print `rootfs-diff v0.1.0`; ordinary source builds print `rootfs-diff dev`.
 
 ## Use the Go module
 
 In an existing consumer module, download the public dependency normally. No GitHub credentials or `GOPRIVATE` setting are required for upstream:
 
 ```sh
-go get github.com/Azhovan/rootfs-diff@main
+go get github.com/Azhovan/rootfs-diff@v0.1.0
 ```
 
-`main` moves. For reproducible consumers, select an audited commit instead; Go records its resolved pseudo-version in the consumer's `go.mod`. Import the root package as:
+The release tag selects the published v0.1.0 API. Use an audited commit or the moving `@main` branch for later development changes; Go records the resolved version in the consumer's `go.mod`. Import the root package as:
 
 ```go
 import rootfsdiff "github.com/Azhovan/rootfs-diff"
@@ -45,10 +47,10 @@ import rootfsdiff "github.com/Azhovan/rootfs-diff"
 The CLI can also be installed directly through Go:
 
 ```sh
-go install github.com/Azhovan/rootfs-diff/cmd/rootfs-diff@main
+go install github.com/Azhovan/rootfs-diff/cmd/rootfs-diff@v0.1.0
 ```
 
-Go installs to `GOBIN` when set, otherwise to the applicable `GOPATH/bin`. Put that directory on your shell's `PATH` if invoking `rootfs-diff` by name.
+Go installs to `GOBIN` when set, otherwise to the applicable `GOPATH/bin`. Put that directory on your shell's `PATH` if invoking `rootfs-diff` by name. This source installation prints version `dev`; the packaged release binaries carry `v0.1.0`.
 
 ## Private copies and forks
 

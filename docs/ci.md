@@ -2,6 +2,23 @@
 
 This is an ordinary workflow step, not a custom GitHub Action. Prepare the source/toolchain, build `./bin/rootfs-diff`, and supply `baseline.tar`, `candidate.tar` and `policy.json` before these steps. Archive creation/download belongs to your build pipeline, not to rootfs-diff.
 
+## Fail CI for a missing required path
+
+For example, save this explicit project rule as `policy.json` to require the candidate archive to record the network startup path:
+
+```json
+{
+  "schema_version": 1,
+  "required_paths": ["etc/init.d/S40network"]
+}
+```
+
+Paths use canonical root-relative spelling, without a leading `/`. A missing explicit candidate entry produces a `required_path` violation and exit **1 with a complete report**. Ignore rules do not suppress required-path checks. Presence alone passes; this rule does not follow links or prove that a startup script will execute correctly. No growth gate is enabled by this policy.
+
+On the [real Buildroot archive pair](../examples/buildroot/README.md#observed-execution), this required-path-only policy returns exit 1 with one `required_path` violation and a complete report. The full proof's literal gated report uses a separate policy with both required presence and `max_total_growth_bytes: 409600`, so it has two violations.
+
+That comparison's `libexample.so` payload increases by 420 KiB (430,080 bytes). Removing the 17-byte startup stub makes net growth 430,063 bytes. Use the report's `net_growth_bytes` when selecting a growth budget; per-file growth and net growth are different quantities.
+
 ## Preserve the tool's exit status
 
 The comparison can return 0 with ordinary differences, 1 with a configured gate failure, or 2 with an operational failure. Capture the actual executable's status. `go run` and a pipeline ending in `tee` are unsuitable when the exact 0/1/2 result is needed.
