@@ -1,22 +1,28 @@
 # Executed Buildroot artifact comparison
 
-This separate, slow example builds two rootfs tar archives with Buildroot and
-compares them using the actual rootfs-diff executable. It does not boot an image,
-execute target files, mount a filesystem, or establish runtime correctness,
-security, hardware compatibility, or general Buildroot/Yocto compatibility.
-The small [synthetic example](../synthetic/README.md) is the ordinary offline demo.
-Neither `scripts/verify.sh` nor the integration tests run this Buildroot recipe.
+This example builds two root filesystem tar archives with Buildroot and compares
+them using the rootfs-diff executable. It is a separate, slower demonstration;
+neither `scripts/verify.sh` nor the integration tests run it. For a small offline
+demo, use the [synthetic example](../synthetic/README.md).
+
+The example compares recorded archive data. It does not boot an image, execute
+target files or mount a filesystem. Its results do not establish runtime
+correctness, security, hardware compatibility or general compatibility with
+Buildroot and Yocto outputs.
 
 ## Prerequisites and reproduction
 
-Use an installed Go 1.27.4 toolchain active on `PATH`, Git, Python 3.11 or later,
-Bash, curl, tar, and Docker with a running Linux arm64 builder. This recipe pins an arm64 container;
-the observed run used native arm64 Linux in a local Colima VM on macOS arm64.
-An x86 host would need working arm64 emulation, which this example has not tested.
+Install Go 1.27.4 and make sure it is active on `PATH`. You also need Git,
+Python 3.11 or later, Bash, curl, tar, and Docker with a running Linux arm64
+builder. The recipe pins an arm64 container image. The recorded run used native
+arm64 Linux in a local Colima VM on macOS arm64. An x86 host would need arm64
+emulation, which has not been tested for this example.
+
 The builder runs as UID/GID 1000, without privileged mode or host mounts. Allow
-4 GiB builder RAM, local CPU time, and at least 20 GiB free Docker storage for the
-toolchain/build tree. Downloads and the builder image require network access on
-the first run. There are no paid/cloud resources or hardware prerequisites.
+4 GiB of builder RAM, time for compilation, and at least 20 GiB of free Docker
+storage for the toolchain and build tree. The first run needs network access to
+download sources and the builder image. No paid services, cloud resources or
+target hardware are required.
 
 From the repository root, choose a new absolute output directory outside Git:
 
@@ -26,12 +32,13 @@ DOCKER_CONTEXT=colima-wifx-case2 \
 ```
 
 Omit `DOCKER_CONTEXT` when the current Docker context is already suitable. The
-script refuses to overwrite proof artifacts. `BUILDROOT_JOBS` defaults to 2;
-`BUILDROOT_CPUS` defaults to 3 and `BUILDROOT_MEMORY` to `4g`. Existing containers
-are not changed. Follow the container name and build-log path printed at startup.
+script refuses to overwrite existing demonstration outputs. `BUILDROOT_JOBS`
+defaults to 2; `BUILDROOT_CPUS` defaults to 3 and `BUILDROOT_MEMORY` to `4g`.
+Existing containers
+are not changed. The script prints the container name and build-log path at startup.
 
-The exact observed command reused a preverified source cache and disabled the
-build container's network:
+The recorded run used the following command. It reused a verified source cache
+and disabled networking in the build container:
 
 ```sh
 BUILDROOT_SOURCE=/private/tmp/rootfs-diff-buildroot-prereq.2PRTHm/buildroot-2025.02.19.tar.xz \
@@ -40,17 +47,19 @@ BUILDROOT_NETWORK=none DOCKER_CONTEXT=colima-wifx-case2 BUILDROOT_JOBS=3 \
   ./examples/buildroot/run.sh /private/tmp/rootfs-diff-buildroot-demo-20261115
 ```
 
-Those temporary paths are execution evidence, not required installation paths.
-For offline reuse, `BUILDROOT_SOURCE` selects the release archive and
+Those temporary paths identify the recorded run. Choose your own paths when
+reproducing it. For offline reuse, `BUILDROOT_SOURCE` selects the release archive and
 `BUILDROOT_DL_CACHE` selects a Buildroot download-cache directory with the layout
-shown below. The image must already be cached. `docker pull` still checks the
-pinned image reference; archive compilation itself needs no network when the
-complete cache is provided. All source hashes are checked by Buildroot before use.
+shown below. The container image must already be cached. `docker pull` still
+checks the pinned image reference; compilation itself needs no network when
+the complete source cache is supplied. Buildroot checks every source hash before use.
 
-`run.sh` builds the CLI from the current checkout, embeds its commit as the
-version, builds both archives through `build.sh`, saves JSON/text reports and
-checks exits 0/1, same-image comparison, repeated report bytes, and independent
-tar inspection. All flags precede archive paths. The comparison commands are:
+`run.sh` builds the CLI from the current checkout and embeds the commit in its
+version string. It then calls `build.sh` to build both archives and saves JSON
+and text reports. It checks exits 0 and 1, compares the baseline with itself,
+verifies identical report bytes across repeated runs, and independently
+inspects the tar archives. All flags precede archive paths. The comparison
+commands are:
 
 ```sh
 OUTPUT=/tmp/rootfs-diff-buildroot-proof
@@ -65,9 +74,9 @@ python3 examples/buildroot/check.py "$OUTPUT/before.tar" "$OUTPUT/after.tar" \
 ```
 
 The first two comparisons return 0; both policy comparisons return 1 with a
-complete report, including the readable missing-file and growth-budget results.
-`run.sh` asserts its JSON gate outcomes rather than treating a failed command as
-an empty successful report. The synthetic demo separately exercises exit 2.
+complete report showing the missing file and exceeded growth budget. `run.sh`
+checks both the exit status and the JSON report for policy failures. The
+synthetic demo separately tests exit 2.
 
 ## Pinned recipe and inputs
 
@@ -84,20 +93,21 @@ This is the native arm64 manifest for upstream's `20250218.2110` builder tag,
 with Debian GCC 12.2, GNU Make 4.3, and GNU tar 1.35. Pulling by digest fixes
 container identity instead of relying on a mutable tag.
 
-The checked-in [defconfig](defconfig) selects aarch64, an internal musl toolchain,
-BusyBox, reproducible builds, and uncompressed tar. It builds no kernel image,
+The checked-in [Buildroot configuration](defconfig) selects aarch64, an internal
+musl toolchain, BusyBox, reproducible builds and uncompressed tar. It builds no kernel image,
 bootloader, or QEMU. Linux sources are still needed for toolchain headers.
-Buildroot expands defaults from this fixed release, and the resolved
+Buildroot fills in defaults from the pinned release, and the complete
 `buildroot.config` is retained beside the generated artifacts.
 
 Both builds use the same configuration and fixed container work path
 `/tmp/rootfs-diff-buildroot`. [post-build.sh](post-build.sh) receives the variant
-through `ROOTFSDIFF_VARIANT`; it explicitly owns the four demonstration paths
-and two unchanged endpoint scripts, and removes `S40network` before creating
-the candidate. Its baseline startup script is a controlled stub, not the
-Buildroot networking implementation. One build tree avoids
-unrelated compiler differences while still generating both archives through
-Buildroot's fakeroot/tar image step. No rootfs archive is unpacked onto the host.
+through `ROOTFSDIFF_VARIANT`. The script controls the four demonstration paths
+and two unchanged scripts that serve as symlink targets. It ensures that
+`S40network` is absent from the candidate. The baseline startup script is a controlled stub
+created for this example. It is not Buildroot's networking implementation.
+Reusing one build tree avoids unrelated compiler differences while generating
+both archives through Buildroot's fakeroot/tar image step. No rootfs archive is
+unpacked onto the host.
 
 The complete source cache for this configuration and pinned builder contains:
 
@@ -127,16 +137,16 @@ the pinned Buildroot source. The downloaded inputs total 280,825,726 bytes.
 
 ## Independently expected findings
 
-This real Buildroot filesystem contains deliberately controlled demonstration
-payloads at familiar release-review paths. `libexample.so` consists of ordinary,
+The generated Buildroot filesystem contains controlled demonstration files at
+paths typical of a release review. `libexample.so` consists of ordinary,
 fully written zero bytes, not an ELF/shared-library binary. The `agent-v1` and
 `agent-v2` endpoints are unchanged shell-script stubs, not a production device
-agent. Neither target programs nor scripts are executed. The baseline
+agent. No target programs or scripts are executed. The baseline
 `S40network` is explicitly replaced with this example's 17-byte startup stub,
 so the removal finding does not depend on incidental Buildroot defaults.
 
-All fixture paths have numeric UID/GID 0. Modes below are octal. These are the
-four independently specified changes, not a hand-written imitation of CLI text:
+All demonstration paths have numeric UID/GID 0. Modes below are octal. The four
+expected changes were specified independently of the CLI output:
 
 | Path | Before | After | Expected fields |
 | --- | --- | --- | --- |
@@ -145,41 +155,47 @@ four independently specified changes, not a hand-written imitation of CLI text:
 | `usr/bin/device-agent` | symlink `agent-v1` | symlink `agent-v2` | link_target |
 | `usr/lib/libexample.so` | mode 0644, 1024 zero bytes | mode 0644, 431104 zero bytes | size, sha256 |
 
-The link endpoints `usr/bin/agent-v1` and `usr/bin/agent-v2` are explicit regular
-entries, both mode 0755, present and unchanged in both images. Their exact
+The symlink targets `usr/bin/agent-v1` and `usr/bin/agent-v2` are explicitly
+recorded regular files. Both have mode 0755 and are unchanged between the
+images. Their exact
 contents are `#!/bin/sh\n# demo agent-v1\nexit 0\n` and the corresponding `v2`
-string. Symlink usability is not inferred by the production scanner.
+string. The production scanner records the symlink target without checking
+whether the link is usable.
 
-Expected: one removal, three modifications, no additions. Library-named payload
-growth is exactly `420 * 1024 = 430080` bytes; net regular-payload growth is
+The expected result is one removal, three modifications and no additions.
+The file named `libexample.so` grows by exactly `420 * 1024 = 430080` bytes.
+Net regular-file payload growth is
 `430080 - 17 = 430063` bytes because the startup script was removed. The one
 positive-growth entry is `usr/lib/libexample.so` at 430080 bytes. These values
-are neither filesystem/flash usage nor an ELF/ABI measurement.
+measure uncompressed file contents. They do not measure filesystem or flash
+usage, or reveal anything about ELF files or ABI compatibility.
 
-The checked-in policy is user-defined CI configuration: it requires
+The checked-in policy defines two checks for CI. It requires
 `etc/init.d/S40network` and permits at most 409600 bytes (400 KiB) of net payload
 growth. This candidate therefore fails both `required_path` and
 `max_total_growth_bytes`. Presence and growth are the only enabled rules; the
-permission and symlink findings are reported for human review without an
-inferred security policy. To gate only on the missing file, omit
+permission and symlink changes are reported for human review; they do not
+trigger a security rule. To fail only on the missing file, omit
 `max_total_growth_bytes` from a copy of the policy. Ordinary differences exit 0
-unless a gate is enabled.
+unless an enabled check requires failure.
 
 No other entry may change. The independent Python inspector reads every tar
-record and hashes regular payloads without extraction or the production scanner;
-it checks all fixture metadata, unchanged endpoints, the entire JSON report,
-and any additional differences. It does not validate boot or runtime behavior.
+record and hashes regular-file contents without extracting entries or calling
+the production scanner. It checks all demonstration metadata, unchanged symlink
+targets, the entire JSON report, and any additional differences. It does not
+validate boot or runtime behavior.
 
 ## Observed execution
 
-The documented fresh-build command completed end to end on 2026-11-15 using
+The fresh-build command shown above completed on 2026-11-15 using
 rootfs-diff compiled from commit `0f39dc8d42fe8aa6c8ff59b52ea33eee06c08f19`,
 the immutable v0.1.0 release source. Only non-Go example files were modified at
-CLI compilation. The new non-root arm64 container used the pinned image,
+the time the CLI was compiled. The new non-root arm64 container used the pinned image,
 17 verified cached sources, three CPUs, a 4 GiB memory cap, no host mounts, and
-no build network. It retained about 6.4 GiB of inputs/build state. This was a
-fresh toolchain/build tree, followed by baseline and candidate fakeroot/tar
-image generations through Buildroot; no existing rootfs tar was edited.
+no network during compilation. It retained about 6.4 GiB of source inputs and
+build state. The run built a fresh toolchain and build tree, then generated
+baseline and candidate images through Buildroot's fakeroot/tar step. It did not
+edit an existing rootfs tar archive.
 
 | Artifact | Bytes | SHA-256 |
 | --- | ---: | --- |
@@ -190,15 +206,15 @@ image generations through Buildroot; no existing rootfs tar was edited.
 The ordinary comparison exited 0. Baseline versus itself with
 `--fail-on-change` exited 0 with 369 unchanged entries, no changes, and zero
 growth. Both the policy comparison and candidate `--fail-on-change` exited 1.
-Repeated ordinary JSON and policy-enabled text bytes were identical. The
-independent checker verified every tar entry, full normal/same/gated JSON
-report, payload hash and total, endpoint fixture, and archive hash. The result
+Repeated runs produced identical ordinary JSON reports and identical
+policy-enabled text reports. The independent checker verified every tar entry,
+the complete ordinary, same-image and policy-enabled JSON reports, payload hashes
+and totals, the unchanged symlink targets, and archive hashes. The result
 was exactly the four expected changes, no additions, no additional differences,
 and no metadata warnings. No ignore rules suppressed anything.
 
-The policy-enabled text command shown above also ran and exited 1 with empty
-stderr. This is its complete, literal CLI output, including both user-defined
-CI failures:
+The policy-enabled text command shown above also ran and exited 1 without writing
+to stderr. Its complete CLI output follows, including both policy violations:
 
 ```text
 rootfs-diff report (schema 1)
@@ -243,9 +259,9 @@ Metadata exclusions:
 These metadata are not compared. No changes does not establish firmware equivalence, bootability, compatibility, or security.
 ```
 
-Archive hashes identify this execution. Pinned inputs and fixed build paths
-improve reproducibility, but this execution does not establish bit-identical
-outputs across other hosts or Buildroot releases. The finding about
+The archive hashes identify this run. Pinned inputs and fixed build paths help
+reproduce it, but do not establish byte-identical outputs across other hosts or
+Buildroot releases. The finding about
 `libexample.so` measures recorded payload growth in deliberately non-ELF data;
 it says nothing about ABI compatibility, runtime behavior, or bootability.
 The previous demonstration's source and documented results remain available in the
@@ -253,9 +269,10 @@ immutable v0.1.0 tag rather than being relabeled as this new execution.
 
 ## Cleanup
 
-Keep the output directory and printed container until review is complete. The
-directory contains archives, reports, inspection results, the resolved config,
-CLI, release source, and build log. The retained container contains the large
-build tree and download cache. Remove only the named proof container using the
-printed `docker rm -f` command, then remove the chosen output directory. No
+Keep the output directory and the container named in the script's output until
+review is complete. The directory contains archives, reports, inspection
+results, the complete configuration, CLI, release source and build log. The
+retained container contains the large build tree and download cache. Remove only
+that container using the printed `docker rm -f` command, then remove the chosen
+output directory. No
 generated firmware, toolchain, third-party binary, or build tree belongs in Git.

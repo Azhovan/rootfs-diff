@@ -1,14 +1,16 @@
 # CLI integration
 
-`cmd/rootfs-diff` is the process entry point. `Run` accepts a context, argument
-slice excluding argv[0], output/diagnostic writers, and optional version/opener
-injection. It owns and closes opened inputs, including on failure. It never
-closes or flushes the supplied writers. An injected opener must return an owned
-file with `Read`, `Stat` and `Close`; the opened file must be regular.
+`cmd/rootfs-diff` starts the process and calls `Run`. `Run` accepts a context,
+the arguments after the executable name (`argv[0]`), writers for reports and
+diagnostics, and optional version and file-opening dependencies. It owns and
+closes the inputs it opens, including on failure. It does not close or flush
+the supplied writers. A custom opener must return a regular file with `Read`,
+`Stat` and `Close` methods, transferring ownership of that file to `Run`.
 
-The command's `--help` is the authoritative option reference. Flags precede the
-two local regular-file inputs; tar/gzip detection does not depend on extensions.
-Limits are positive decimal int64 values. Standard input, URLs and input symlinks are unsupported.
+The command's `--help` lists the supported options. Flags must precede the two
+local regular-file inputs. Tar and gzip detection does not depend on filename
+extensions. Limits are positive decimal values that fit in `int64`. Standard
+input, URLs and input symlinks are unsupported.
 Use `./` before a local filename beginning with `-`.
 
 ```sh
@@ -18,12 +20,14 @@ go build -o ./bin/rootfs-diff ./cmd/rootfs-diff
 ./bin/rootfs-diff --fail-on-change before.tar after.tar
 ```
 
-Exit 0 means comparison and enabled gates passed. Ordinary differences succeed.
-Exit 1 means policy violations or the explicit change gate; stdout still contains
-a complete report. Exit 2 means usage, input, limit, I/O, rendering or cancellation
-failure. Pre-render failures leave stdout empty. Reports use stdout and diagnostics
-use stderr. A downstream write error, including a closed pipe, returns 2 and can
-leave a partial report. Consumers must inspect exit status before trusting output.
+Exit 0 means the comparison succeeded and all enabled checks passed. Ordinary
+differences alone do not cause failure. Exit 1 means a policy violation, or
+changes found with `--fail-on-change`; stdout still contains a complete report.
+Exit 2 means invalid usage or input, an exceeded limit, an I/O or rendering
+failure, or cancellation. Failures before rendering leave stdout empty. Reports
+go to stdout and diagnostics to stderr. A write error, including a closed pipe,
+returns 2 and may leave a partial report. Consumers must check the exit status
+before using the output.
 Cancellation is checked between reads and workflow stages; it cannot interrupt an
 arbitrary reader or writer already blocked in a call. The executable handles
 interrupt and termination signals using the same cancellation context.
@@ -35,8 +39,9 @@ go build -ldflags '-X main.version=example' -o ./bin/rootfs-diff ./cmd/rootfs-di
 ./bin/rootfs-diff --version
 ```
 
-The CLI delegates scanning, comparison, policy parsing/evaluation and rendering
-to the public packages. Ignore rules affect comparison and growth; required paths
-are checked against the complete candidate manifest. Reports retain warnings and
-standard metadata exclusions even when paths are ignored. See the contract and
-schema for archive semantics and output fields.
+The CLI calls the public packages for scanning, comparison, policy parsing,
+policy evaluation and rendering. Ignore rules affect comparison and growth;
+required-path checks inspect the complete candidate manifest. Reports include
+warnings and standard metadata exclusions even when paths are ignored. See the
+[contract](../../docs/v0.1-contract.md) and
+[schema](../../docs/report-v1.schema.json) for archive behavior and output fields.

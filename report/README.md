@@ -1,52 +1,58 @@
 # Public report renderer
 
-Import `github.com/Azhovan/rootfs-diff/report` and call
+To write a report, import `github.com/Azhovan/rootfs-diff/report` and call
 `report.Write(writer, model, report.Text)`. `report.JSON` and `report.Markdown`
-select the other formats. The executable `ExampleWrite` demonstrates constructing
-a report from comparison results. Scanning and policy evaluation remain in the
-root package; the renderer only presents validated model data.
+select the other formats. The executable `ExampleWrite` shows how to construct
+a report from comparison results. The root package handles scanning and policy
+evaluation; the renderer presents the resulting validated data.
 
 `Write` validates the complete report before calling the writer. It rejects
-unknown formats with `rootfsdiff.ErrUnsupportedInput`; invalid reports and a nil
-writer return `rootfsdiff.ErrInvalidInput`. Use `errors.Is` or `errors.As` through
-the returned error. A zero-value format is unsupported. Supply schema version 1
+unknown formats with `rootfsdiff.ErrUnsupportedInput`. Invalid reports and a nil
+writer return `rootfsdiff.ErrInvalidInput`. Use `errors.Is` to check the error
+category or `errors.As` to inspect its details. A zero-value format is
+unsupported. Supply schema version 1
 and the exact list from `rootfsdiff.MetadataExclusions()` even for an empty report.
 
 JSON follows [schema version 1](../docs/report-v1.schema.json), with all fields in
 [model order](../docs/models.md), two-space indentation and a final newline.
-Version changes require coordinated model/schema/consumer changes. Empty slices
-are `[]`; absent change sides and inapplicable violation numbers are explicit
-`null`. All integers are exact decimal JSON numbers, including signed UID/GID,
-64-bit counts and bytes, and mode bits as a decimal integer in the `07777` mask.
-Consumers must preserve 64-bit integer precision. JSON strings use Go's standard
-JSON escaping, including HTML-sensitive characters, plus Unicode escapes for
-DEL, C1 and nonprinting Unicode characters. It has no host source
-filenames, timestamps or run-dependent values.
+Version changes require coordinated updates to models, the schema and consumers.
+Empty slices are `[]`; absent change sides and inapplicable violation numbers
+are explicitly `null`. Integers are exact decimal JSON numbers. This includes
+signed UID/GID, 64-bit counts and byte sizes, and mode bits in the `07777` mask.
+Consumers must preserve 64-bit integer precision.
 
-All formats include the summary, every complete change, positive growth,
-violations, source-tagged warnings and the fixed metadata exclusions. Changes
-sort by canonical path; changed fields use the fixed model order. Growth sorts
-by descending bytes then path; violations by rule then path; warnings by path,
-code, key, source (so `after` precedes `before` on a tie). Input ordering is
-validated, never silently sorted or mutated. Equivalent valid models, including
-nil versus empty slices, produce identical bytes.
+JSON strings use Go's standard escaping, including for HTML-sensitive characters.
+They also use Unicode escapes for the DEL character, C1 control characters and
+nonprinting Unicode characters. Reports contain no host source filenames,
+timestamps or values that vary between runs.
 
-Text and Markdown include counts, regular-payload totals and signed net growth,
-every applicable before/after entry field, and at most ten growth rankings. The
-ranking heading explicitly shows the displayed and total counts; JSON retains
-the entire ranking. Human modes use octal with a leading zero, preserving all
-special bits. Hardlink effective sizes/digests are shown, but aliases do not
-contribute payload totals. Added/removed sides display `absent`.
+Every format includes the summary, all complete changes, positive growth,
+violations, warnings identifying the source archive, and the fixed metadata
+exclusions. Changes are sorted by canonical path, and changed fields use the
+fixed model order. Growth records are sorted by descending bytes, then path;
+violations by rule, then path; and warnings by path, code, key and source. When
+only the warning source differs, `after` comes before `before`. The renderer
+validates input ordering rather than silently sorting or changing the input.
+Equivalent valid models, including nil and empty slices, produce identical bytes.
 
-Every untrusted human-facing string is double-quoted with Go string escapes.
+Text and Markdown include entry counts, regular-file payload totals, signed net
+growth and every applicable before/after entry field. They show at most ten
+entries in the growth ranking, with a heading giving both the displayed and
+total counts. JSON includes the whole ranking. File modes use octal with a
+leading zero, preserving special bits. Hardlink sizes and digests are shown
+using their effective values, but aliases do not count again in payload totals.
+The missing side of an addition or removal is displayed as `absent`.
+
+Every string taken from an archive is double-quoted with Go string escapes in
+text and Markdown.
 Newlines, tabs, carriage returns, terminal escape sequences, C1 controls and
 Unicode format controls are visible escapes. Printable Unicode remains readable;
 long strings and changes are never truncated. Markdown wraps these quoted strings
 in HTML `code` elements with ASCII punctuation encoded as numeric entities, so
 Markdown syntax, links and HTML remain literal when rendered. Metadata warning
-keys are shown, never their values. No changes or lack of violations establishes
-firmware equivalence, bootability, compatibility or security; reports always state
-the excluded metadata.
+keys are shown, without their values. A report with no changes or violations
+does not establish firmware equivalence, bootability, compatibility or security.
+Reports always list the excluded metadata.
 
 For example, an added symlink appears in text as:
 
@@ -56,9 +62,10 @@ For example, an added symlink appears in text as:
     After: kind=symlink mode=0777 uid=0 gid=0 link_target="../lib/agent"
 ```
 
-Each report is encoded in memory, then written once. A writer error may leave a
-partial output; do not consume that output as an intact report. Underlying errors
-remain reachable; a short write with no error returns `io.ErrShortWrite`. There
-are no retries, process exits or implicit stdout writes. `Write` does not close
-or flush the caller-owned writer. Independent calls share no mutable state; the
-caller must avoid concurrent mutation of the model or unsafe writer sharing.
+Each report is encoded in memory, then written in one call. A writer error may
+leave partial output, which must not be treated as a complete report. Returned
+errors preserve the underlying cause; a short write with no error returns
+`io.ErrShortWrite`. `Write` does not retry, exit the process, write to stdout
+implicitly, close the writer or flush it. The caller owns the writer.
+Independent calls share no mutable state. Callers must not modify the model
+while it is being rendered, and must coordinate access to shared writers.

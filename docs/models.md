@@ -1,63 +1,70 @@
 # Models and JSON schema version 1
 
-The root `rootfsdiff` package provides models, `Validate` methods,
-`ScanOptions.WithDefaults`, `ValidatePath`, `MetadataExclusions`, and typed errors.
-The [behavior contract](v0.1-contract.md) remains the semantic reference.
+The root `rootfsdiff` package defines the data passed between scanning,
+comparison, policy evaluation and reporting. It also provides `Validate`
+methods, `ScanOptions.WithDefaults`, `ValidatePath`, `MetadataExclusions` and
+typed errors. This page describes those models and their JSON representation;
+the [behavior contract](v0.1-contract.md) defines the required behavior.
 
 ## Component boundaries
 
-Scanning exposes:
+Use `Scan` to read an archive into a manifest, a list of entries and their metadata:
 
 ```go
 Scan(ctx context.Context, r io.Reader, opts ScanOptions) (Manifest, error)
 ```
 
-Comparison exposes:
+Use `Compare` to find changes between a baseline and candidate manifest:
 
 ```go
 Compare(before, after Manifest, opts CompareOptions) (Diff, error)
 ```
 
-Policy operations expose:
+Use `ParsePolicy` to read a policy, then `Evaluate` to check the candidate and diff:
 
 ```go
 ParsePolicy(r io.Reader) (Policy, error)
 Evaluate(after Manifest, diff Diff, policy Policy) ([]Violation, error)
 ```
 
-The public `report` package imports root `rootfsdiff` and implements
+The public `report` package imports `rootfsdiff` and provides
 `Write(io.Writer, rootfsdiff.Report, Format) error`, with string formats `text`,
-`json`, and `markdown`. Core never imports it. `internal/cli` owns an injectable
-`Run` function, process diagnostics and exit-code selection;
-`cmd/rootfs-diff/main.go` is the thin process entry point. Public component and
+`json`, and `markdown`. The root package does not depend on the renderer.
+`internal/cli` contains the injectable `Run` function and handles diagnostics
+and exit codes. `cmd/rootfs-diff/main.go` starts the process and calls it.
+The public API examples and
 [complete library examples](../examples/library/README.md) compile and execute
 under `go test ./...`.
 
-Core operations must validate caller-built inputs, avoid mutation, printing and
-exits, and retain underlying errors. The scanner does not close its caller-owned
-reader. Cancellation checks occur between bounded reads and cannot interrupt an
+Library operations validate inputs built by callers without changing them. They
+do not print or exit the process, and returned errors preserve their underlying
+causes. The caller owns the scanner's reader and is responsible for closing it.
+The scanner checks cancellation between bounded reads, but cannot interrupt an
 arbitrary reader already blocked inside `Read`. Independent calls share no
-mutable options. Concurrent caller mutation of input slices or entries is not
-supported.
+mutable options. Callers must not modify input slices or entries while an
+operation is using them.
 
 ## Value and validation rules
 
 Every data model (`Entry`, `Manifest`, `Change`, `Summary`, `Growth`, `Diff`,
-`Policy`, `Violation`, `Warning`, `Report`) and options type has `Validate`.
-Validation reads inputs without sorting or rewriting them. All byte sizes,
-counters, limits, UID/GID and device numbers use `int64`; mode uses `uint32`
-restricted to `07777`. Tar numeric IDs are preserved, including signed IDs,
-without host name lookup. Sizes/counts/device numbers are nonnegative and checked
-aggregate payload sums cannot overflow `int64`. JSON integer overflow, fractional
-numbers and negative unsigned modes fail during Go JSON decoding.
+`Policy`, `Violation`, `Warning`, `Report`) and options type has a `Validate`
+method. Validation reads the input without sorting or rewriting it.
 
-Canonical model paths are nonempty UTF-8 POSIX root-relative strings with no
-empty, `.` or `..` segment. They have no leading or trailing slash. Backslash,
-glob characters and control characters are literal filename data. Model
-validation imposes no default scan length cap; the scanner validates decoded
-paths against the selected options before normalization. Symlink targets are arbitrary valid
-UTF-8 preserved verbatim, including absolute paths, `..` and an empty target.
-Hardlink targets must be canonical paths.
+Byte sizes, counters, limits, UID/GID and device numbers use `int64`. Mode uses
+`uint32`, restricted to the permission and special bits in `07777`. Numeric tar
+IDs retain their signed values and are never resolved to host user or group
+names. Sizes, counts and device numbers must be nonnegative; payload totals are
+checked for `int64` overflow. Go's JSON decoder rejects integers that overflow
+their destination types, fractional numbers in integer fields, and negative modes.
+
+Model paths must already be canonical: nonempty UTF-8 strings relative to the
+archived filesystem root, using POSIX `/` separators. They cannot have a leading
+or trailing slash, an empty segment, or a `.` or `..` segment. Backslashes, glob
+characters and control characters are literal filename data. Model validation
+does not impose the scanner's default length limit; the scanner checks decoded
+paths against its selected limit before normalization. Symlink targets may be
+any valid UTF-8 string and are preserved exactly, including absolute targets,
+`..` and an empty target. Hardlink targets must be canonical paths.
 
 `Entry` uses this fixed field order, also used for each change side:
 
@@ -72,41 +79,47 @@ Hardlink targets must be canonical paths.
 | `link_target` | Symlink verbatim target or hardlink canonical target, otherwise empty string |
 | `device_major`, `device_minor` | Nonnegative device values, otherwise zero |
 
-A hardlink's effective mode, UID, GID, size and SHA-256 must equal its terminal
-regular entry. `Manifest.Validate` checks target existence, cycles, endpoint and
-effective metadata, as well as unique paths and explicit non-directory ancestors.
-Implicit parents are valid and are not synthesized. Caller manifests may have any
-entry/warning order; scanner-produced entries sort by path. Only regular entries
-contribute payload bytes, so hardlink aliases never multiply totals. Changes are
-partial views: their embedded entries validate independently without demanding
-hardlink targets that may be absent after filtering.
+A hardlink's effective mode, UID, GID, size and SHA-256 must match the regular
+file at the end of its link chain. `Manifest.Validate` checks that targets exist,
+chains have no cycles and end at regular files, and effective metadata matches.
+It also checks path uniqueness and rejects an explicitly recorded non-directory
+that is a parent of another entry. Missing parent directory records are valid;
+validation does not create them.
+
+Caller-built manifests may list entries and warnings in any order. The scanner
+sorts its entries by path. Only regular entries contribute payload bytes, so
+hardlinks do not count the same contents again. A change contains only part of
+the original manifest. Its embedded entries are therefore validated individually,
+without requiring the entries named by hardlink targets to remain in the diff.
 
 `ScanOptions` fields are `MaxEntries`, `MaxArchiveBytes`, `MaxFileBytes`, and
-`MaxPathBytes`. Zero means the contract defaults of 100,000, 8 GiB, 2 GiB and
-4,096 respectively. `WithDefaults` returns an independent effective value.
-Negatives fail, positive overrides are accepted up to `int64` maximum; cross-limit
-relationships need no extra restriction. `CompareOptions` contains `IgnorePaths`
-and `IgnorePrefixes`; every value must be canonical. Duplicate and unordered
-ignore rules or required policy paths are accepted and have no extra effect.
+`MaxPathBytes`. Zero selects the respective defaults of 100,000 entries, 8 GiB
+per archive, 2 GiB per regular file and 4,096 bytes per path or link target.
+`WithDefaults` returns a separate options value with those defaults filled in.
+Negative values are invalid; positive values up to the `int64` maximum are
+accepted. The limits need not have any particular relationship to one another.
+
+`CompareOptions` contains `IgnorePaths` and `IgnorePrefixes`; every path must be
+canonical. Ignore rules and required policy paths may appear in any order.
+Duplicates are accepted and have no additional effect.
 
 ## JSON layout and ordering
 
-[report-v1.schema.json](report-v1.schema.json) fixes structural schema version 1,
-including reusable definitions for models. Go `Validate` additionally checks
-cross-field consistency, ordering, uniqueness, hardlinks and arithmetic. Ordinary
-`encoding/json` decoding is not a strict policy parser or a substitute for
-validation; `ParsePolicy` enforces the contract's duplicate/unknown-key,
-trailing-input and 1 MiB restrictions. The structural schema rejects unknown
-fields; callers using Go decoding must separately control unknown fields if they
-need that property.
+[report-v1.schema.json](report-v1.schema.json) defines the version 1 JSON
+structure, including reusable model definitions. The Go `Validate` methods also
+check consistency between fields, ordering, uniqueness, hardlinks and arithmetic.
+Decoding with `encoding/json` does not replace validation or strict policy
+parsing. Use `ParsePolicy` to reject duplicate or unknown keys, trailing input,
+and policies larger than 1 MiB. The JSON schema also rejects unknown fields;
+callers decoding directly in Go must configure that check separately if needed.
 
-Every model slice marshals as `[]` when empty, including nested `changed_fields`,
-policy paths and compare options. Marshaling does not validate or mutate values.
-`before` and `after` are always present, with an absent side encoded as `null`.
-Optional policy `max_total_growth_bytes` is omitted when its pointer is nil; a
-pointer to zero enables a no-positive-growth gate. `Violation.limit` and `actual`
-are explicit null for required-path failures. No timestamp, host filename or
-run-dependent field exists.
+Every empty model slice is encoded as `[]`, including nested `changed_fields`,
+policy paths and compare options. JSON encoding does not validate or modify
+values. Both `before` and `after` are always present, with an absent side encoded
+as `null`. The optional policy field `max_total_growth_bytes` is omitted when
+its pointer is nil; a pointer to zero enables a check that forbids positive net
+growth. For required-path violations, `limit` and `actual` are explicitly `null`.
+Reports contain no timestamp, host filename or field that varies between runs.
 
 The top-level report order is:
 
@@ -118,62 +131,72 @@ The top-level report order is:
 6. `warnings`
 7. `metadata_exclusions`
 
-Summary order is `before_entries`, `after_entries`, `added`, `removed`, `modified`,
-`unchanged`, `before_payload_bytes`, `after_payload_bytes`, `net_growth_bytes`.
-Entry counts describe both retained sides after ignores. Before count equals
-removed + modified + unchanged; after count equals added + modified + unchanged.
-Payload totals count retained regular entries only, and net growth is after minus
-before. Diff validation checks change counts and changed payload contributions,
-including equal residual bytes for unchanged entries.
+Summary fields appear in this order: `before_entries`, `after_entries`, `added`,
+`removed`, `modified`, `unchanged`, `before_payload_bytes`, `after_payload_bytes`,
+`net_growth_bytes`. Entry counts describe the baseline and candidate after ignore
+rules are applied. The baseline count equals removed + modified + unchanged;
+the candidate count equals added + modified + unchanged. Payload totals count
+only retained regular files, and net growth is after minus before. Diff
+validation checks change counts and payload contributions. After subtracting
+the bytes accounted for by changes, both sides must have the same remaining
+payload total for unchanged entries.
 
-Changes sort by canonical path and use `path`, `kind`, `before`, `after`,
-`changed_fields`. Kinds are `added`, `removed`, `modified`. Added/removed changes
-carry the full present side and an empty changed-field array. Modified changes
-carry both sides and every unequal compared field in this order: `kind`, `mode`,
+Changes are sorted by canonical path and contain `path`, `kind`, `before`,
+`after`, `changed_fields`, in that field order. The change kinds are `added`,
+`removed` and `modified`. Additions and removals carry the complete entry on the
+present side and an empty changed-field array. Modifications carry both sides
+and list every unequal compared field in this order: `kind`, `mode`,
 `uid`, `gid`, `size`, `sha256`, `link_target`, `device_major`, `device_minor`.
-Type changes are single modified records.
+A change in entry kind is reported as one modified record.
 
-`positive_growth` records have `path`, `bytes`. They include each positive regular
-payload delta from the changes, including type transitions, and sort by descending
-bytes then ascending path. JSON retains the full list; human renderers show at
-most ten growth entries while rendering all changes.
+Each `positive_growth` record contains `path` and `bytes`. The list includes
+every positive change in regular-file payload size, including entries that
+change from another kind to a regular file. Records are sorted by descending
+bytes, then ascending path. JSON includes the full list; text and Markdown show
+at most ten growth entries while still including all changes.
 
-Violations use `rule`, `path`, `limit`, `actual`, sorted uniquely by rule then
-path. `required_path` has a canonical path and null numeric fields.
-`max_total_growth_bytes` has empty path and nonnegative limit with actual greater
-than limit; report actual must equal summary net growth. Evaluation checks the
-complete candidate manifest for required paths, regardless of comparison ignores.
+Violations contain `rule`, `path`, `limit` and `actual`. They are unique and
+sorted by rule, then path. A `required_path` violation has a canonical path and
+null numeric fields. A `max_total_growth_bytes` violation has an empty path and
+a nonnegative limit, with `actual` greater than the limit. Its `actual` value
+must equal the report summary's net growth. Required-path checks inspect the
+complete candidate manifest, including entries ignored in the comparison.
 
-Warnings use `source`, `path`, `code`, `key`. Code is `uncompared_metadata`; key is
-nonempty valid UTF-8 and no value is recorded. A warning path is canonical, with
-one warning-only exception: `.` identifies metadata on an ignored root directory
-record. Root warnings remain even though no root entry is retained or synthesized.
-All actual entry, hardlink target, ignore and required-path rules are unchanged;
-`.` is invalid for those paths. Manifest sources are empty strings, and each
-nonroot warning identifies an explicit entry. Comparison/report sources are
-`before` or `after` even for ignored paths. Output warnings sort uniquely by path,
-code, key, source using Go string order (`after` precedes `before` on a final tie).
-Warnings do not prove runtime consequences.
+Warnings contain `source`, `path`, `code` and `key`. The code is
+`uncompared_metadata`; the key must be nonempty valid UTF-8. Metadata values are
+never recorded. Warning paths are canonical, except that `.` identifies
+metadata on an ignored root directory record. Such warnings remain even though
+there is no root manifest entry. The path `.` is invalid for entries, hardlink
+targets, ignores and required paths.
+
+In a manifest, a warning's `source` is empty and each nonroot warning refers to
+an explicitly recorded entry. In a diff or report, `source` is `before` or
+`after`, including for ignored paths. Output warnings are unique and sorted by
+path, code, key and source, using Go string order. When only the source differs,
+`after` comes before `before`. A warning identifies metadata that was not
+compared; it does not establish an effect on a running system.
 
 `metadata_exclusions` is the fixed sorted list returned as a fresh slice by
 `MetadataExclusions()`: `acls`, `directory_sizes`, `file_capabilities`,
 `selinux_labels`, `timestamps`, `unrecognized_pax_metadata`, `user_group_names`,
-`xattrs`. Every report includes it. Order, compression and padding are archive
-representation details outside comparison; hardlink header metadata is ignored in
-favor of terminal regular metadata.
+`xattrs`. Every report includes this list. Entry order, compression and padding
+do not affect the comparison. Hardlink header metadata is ignored; hardlinks use
+the effective metadata of the regular file at the end of their link chain.
 
-Schema-version changes require coordinated model, example and consumer updates.
-Version 1 output fields and enum meanings are fixed by these examples. Human
-renderers must escape untrusted control characters and Markdown/HTML syntax.
+Changing the schema version requires coordinated updates to models, examples
+and consumers. These examples define the version 1 output fields and allowed
+values. Text and Markdown renderers must escape control characters in strings
+taken from archives. Markdown also escapes Markdown and HTML syntax.
 
 ## Executable fixtures
 
-- [Complete report](../testdata/models/report-v1.json): before count 3, after count
-  3, one added/removed/modified and one unchanged; payload 8 to 9 bytes, net +1.
+- [Complete report](../testdata/models/report-v1.json): three entries on each
+  side, with one addition, one removal, one modification and one unchanged entry.
+  Payload grows from 8 to 9 bytes, for net growth of +1 byte.
   `etc/device.conf` changes from mode `0640` (JSON 416) to `06750` (JSON 3560),
   size 2 to 4 and a changed SHA-256. `etc/new` adds 2 bytes and `obsolete` removes
-  3. Positive growth lists the two +2 paths, tied by path. A zero-byte growth gate
-  fails, as does a missing required `usr/bin/agent`.
+  3. The two +2-byte growth records are sorted by path to break the tie. A
+  zero-byte growth limit is exceeded, and required path `usr/bin/agent` is missing.
 - [Empty report](../testdata/models/empty-report-v1.json): all counters zero,
   explicit empty arrays and the same exclusions.
 - [Valid manifest](../testdata/models/valid-manifest.json): all seven entry kinds,
@@ -187,16 +210,18 @@ renderers must escape untrusted control characters and Markdown/HTML syntax.
 - [Policy](../testdata/models/policy-v1.json): version 1 with required paths and a
   nonnegative explicit growth limit.
 
-Fixture expectations were authored without production scanning or comparison.
-Tests decode, validate and round-trip reports with exact fields/order and inspect
-the report's independently expected modes, changed fields and growth.
+Expected fixture values were written independently of the production scanner
+and comparator. Tests decode, validate, encode and decode reports again. They
+check exact fields and ordering, along with the expected modes, changed fields
+and growth values.
 
 ## Errors
 
-Use `errors.Is(err, ErrInvalidInput)`, `ErrUnsupportedInput`, or
-`ErrLimitExceeded` for input categories. `*Error` carries operation, archive path,
-kind and underlying error. `*LimitError` carries budget name, maximum, first
-observed excess and optional underlying error; use `errors.As` for details.
-An empty `Error.Kind` adds context without assigning an input category. Standard
-I/O errors and cancellation remain reachable through `Unwrap`. Model validation
-failures are invalid input; they do not claim an archive parser has run.
+Use `errors.Is` with `ErrInvalidInput`, `ErrUnsupportedInput` or
+`ErrLimitExceeded` to identify input error categories. Use `errors.As` to inspect
+details: `*Error` records the operation, archive path, category and underlying
+error; `*LimitError` records the limit name, maximum, first observed value that
+exceeded it, and optional underlying error. An empty `Error.Kind` adds context
+without assigning an input category. Standard I/O errors and cancellation can
+still be reached through `Unwrap`. Model validation failures are categorized as
+invalid input, even when no archive parser has run.

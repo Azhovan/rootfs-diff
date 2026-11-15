@@ -1,8 +1,9 @@
 # Archive fixtures
 
-This internal test helper writes small archives in memory with Go's standard
-library. It does not extract files, resolve host users/groups, or call production
-scan/compare code. Author expected manifests and reports independently.
+This internal test helper writes small archives in memory using Go's standard
+library. It does not extract files, resolve host users or groups, or call the
+production scanner or comparator. Write expected manifests and reports
+independently of the code being tested.
 
 ```go
 archive, err := testfixture.Tar(testfixture.Entry{
@@ -14,21 +15,22 @@ archive, err := testfixture.Tar(testfixture.Entry{
 })
 ```
 
-Set `Header.Size` explicitly for payload records. Headers are encoded with the
-normalization and format constraints of `archive/tar`; payloads inconsistent with
-the encoded size return errors. Use `tar.FormatGNU` or `tar.FormatPAX` for long names,
+Set `Header.Size` explicitly for entries with payloads. `archive/tar` encodes
+headers using its normal normalization and format rules. Payloads that do not
+match the encoded size return errors. Use `tar.FormatGNU` or `tar.FormatPAX` for long names,
 `PAXRecords` or `Xattrs` for vendor metadata, `Linkname` for symlinks/hardlinks,
-and `Devmajor`/`Devminor` for devices. Entry order is the argument order, allowing
-forward hardlinks and duplicate-path fixtures.
+and `Devmajor`/`Devminor` for devices. Entries are written in argument order,
+so tests can include forward hardlink references and duplicate paths.
 
-`Gzip(archive)` creates a deterministic single gzip member without a filename or
-timestamp. Concatenate member byte slices to test multi-member input.
+`Gzip(archive)` creates a single gzip member without a filename or timestamp,
+producing the same bytes each time. To test multiple members, concatenate their
+byte slices.
 
 `Patch(data, offset, replacement)` returns a copy with the requested bytes
-replaced and rejects out-of-bounds patches. It supports corrupted tar checksums
-or gzip trailers. Pass a prefix such as `archive[:514]` to create truncation;
-append bytes or whole archives to exercise trailing data. Unsupported records
-that `archive/tar.Writer` refuses to encode need deliberate raw byte fixtures.
+replaced. It rejects patches outside the slice bounds and can be used to corrupt
+tar checksums or gzip trailers. Use a prefix such as `archive[:514]` to create
+truncated input, or append bytes or whole archives to test trailing data. To test
+records that `archive/tar.Writer` refuses to encode, construct raw bytes explicitly.
 
 The builder buffers all fixture bytes. Use small payloads or a custom streaming
 test reader for resource-limit tests.
