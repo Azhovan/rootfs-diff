@@ -9,8 +9,8 @@ Neither `scripts/verify.sh` nor the integration tests run this Buildroot recipe.
 
 ## Prerequisites and reproduction
 
-Use an installed Go 1.27.4 toolchain, Git, Python 3.11 or later, Bash, curl, tar,
-and Docker with a running Linux arm64 builder. This recipe pins an arm64 container;
+Use an installed Go 1.27.4 toolchain active on `PATH`, Git, Python 3.11 or later,
+Bash, curl, tar, and Docker with a running Linux arm64 builder. This recipe pins an arm64 container;
 the observed run used native arm64 Linux in a local Colima VM on macOS arm64.
 An x86 host would need working arm64 emulation, which this example has not tested.
 The builder runs as UID/GID 1000, without privileged mode or host mounts. Allow
@@ -37,7 +37,7 @@ build container's network:
 BUILDROOT_SOURCE=/private/tmp/rootfs-diff-buildroot-prereq.2PRTHm/buildroot-2025.02.19.tar.xz \
 BUILDROOT_DL_CACHE=/private/tmp/rootfs-diff-buildroot-prereq.2PRTHm/dl \
 BUILDROOT_NETWORK=none DOCKER_CONTEXT=colima-wifx-case2 BUILDROOT_JOBS=3 \
-  ./examples/buildroot/run.sh /private/tmp/rootfs-diff-buildroot-proof-20261114
+  ./examples/buildroot/run.sh /private/tmp/rootfs-diff-buildroot-demo-20261115
 ```
 
 Those temporary paths are execution evidence, not required installation paths.
@@ -58,12 +58,15 @@ OUTPUT=/tmp/rootfs-diff-buildroot-proof
 "$OUTPUT/rootfs-diff" --format json --fail-on-change "$OUTPUT/before.tar" "$OUTPUT/before.tar"
 "$OUTPUT/rootfs-diff" --format json --policy examples/buildroot/policy.json \
   "$OUTPUT/before.tar" "$OUTPUT/after.tar"
+"$OUTPUT/rootfs-diff" --format text --policy examples/buildroot/policy.json \
+  "$OUTPUT/before.tar" "$OUTPUT/after.tar"
 python3 examples/buildroot/check.py "$OUTPUT/before.tar" "$OUTPUT/after.tar" \
   "$OUTPUT/report.json" "$OUTPUT/same.json" "$OUTPUT/gated.json"
 ```
 
-The first two commands return 0; the policy command returns 1 with a complete
-report. `run.sh` asserts those outcomes rather than treating a failed command as
+The first two comparisons return 0; both policy comparisons return 1 with a
+complete report, including the readable missing-file and growth-budget results.
+`run.sh` asserts its JSON gate outcomes rather than treating a failed command as
 an empty successful report. The synthetic demo separately exercises exit 2.
 
 ## Pinned recipe and inputs
@@ -89,8 +92,10 @@ Buildroot expands defaults from this fixed release, and the resolved
 
 Both builds use the same configuration and fixed container work path
 `/tmp/rootfs-diff-buildroot`. [post-build.sh](post-build.sh) receives the variant
-through `ROOTFSDIFF_VARIANT`; it resets only project-owned paths and explicitly
-removes the startup script before creating the candidate. One build tree avoids
+through `ROOTFSDIFF_VARIANT`; it explicitly owns the four demonstration paths
+and two unchanged endpoint scripts, and removes `S40network` before creating
+the candidate. Its baseline startup script is a controlled stub, not the
+Buildroot networking implementation. One build tree avoids
 unrelated compiler differences while still generating both archives through
 Buildroot's fakeroot/tar image step. No rootfs archive is unpacked onto the host.
 
@@ -122,89 +127,112 @@ the pinned Buildroot source. The downloaded inputs total 280,825,726 bytes.
 
 ## Independently expected findings
 
-All demo paths have numeric UID/GID 0. The regular-file contents below are exact
-UTF-8 bytes with the shown newlines; symlink targets are compared verbatim.
+This real Buildroot filesystem contains deliberately controlled demonstration
+payloads at familiar release-review paths. `libexample.so` consists of ordinary,
+fully written zero bytes, not an ELF/shared-library binary. The `agent-v1` and
+`agent-v2` endpoints are unchanged shell-script stubs, not a production device
+agent. Neither target programs nor scripts are executed. The baseline
+`S40network` is explicitly replaced with this example's 17-byte startup stub,
+so the removal finding does not depend on incidental Buildroot defaults.
 
-| Path | Before | After | Expected changed fields |
+All fixture paths have numeric UID/GID 0. Modes below are octal. These are the
+four independently specified changes, not a hand-written imitation of CLI text:
+
+| Path | Before | After | Expected fields |
 | --- | --- | --- | --- |
-| `etc/init.d/S99rootfs-diff-demo` | mode 0755, `#!/bin/sh\nexit 0\n` (17 bytes) | absent | removed |
-| `etc/rootfs-diff-demo/config` | mode 0644, `feature=off\n` (12 bytes) | `feature=on!\n` (12 bytes) | sha256 |
-| `etc/rootfs-diff-demo/current` | symlink `config` | symlink `/etc/rootfs-diff-demo/config` | link_target |
-| `usr/share/rootfs-diff-demo/data` | mode 0644, `base\n` (5 bytes) | `base\nadditional payload\n` (24 bytes) | size, sha256 |
-| `usr/share/rootfs-diff-demo/tool` | mode 0755, `demo executable\n` (16 bytes) | same bytes, mode 0700 | mode |
+| `etc/init.d/S40network` | mode 0755, `#!/bin/sh\nexit 0\n` (17 bytes) | absent | removed |
+| `etc/device.conf` | mode 0640, `device=demo\n` (12 bytes) | same bytes, mode 0666 | mode |
+| `usr/bin/device-agent` | symlink `agent-v1` | symlink `agent-v2` | link_target |
+| `usr/lib/libexample.so` | mode 0644, 1024 zero bytes | mode 0644, 431104 zero bytes | size, sha256 |
 
-Expected: one removal, four modifications, no additions, net payload growth
-`+19 - 17 = +2` bytes, and one positive-growth entry of 19 bytes for `data`.
-The policy requires the removed startup script and permits only 1 byte net
-growth, so both `required_path` and `max_total_growth_bytes` must fail. No other
-entry may change. The inspector reads every tar record and hashes payloads using
-Python's standard library, without extraction or the production scanner; it
-checks the entire report and flags any additional difference.
+The link endpoints `usr/bin/agent-v1` and `usr/bin/agent-v2` are explicit regular
+entries, both mode 0755, present and unchanged in both images. Their exact
+contents are `#!/bin/sh\n# demo agent-v1\nexit 0\n` and the corresponding `v2`
+string. Symlink usability is not inferred by the production scanner.
+
+Expected: one removal, three modifications, no additions. Library-named payload
+growth is exactly `420 * 1024 = 430080` bytes; net regular-payload growth is
+`430080 - 17 = 430063` bytes because the startup script was removed. The one
+positive-growth entry is `usr/lib/libexample.so` at 430080 bytes. These values
+are neither filesystem/flash usage nor an ELF/ABI measurement.
+
+The checked-in policy is user-defined CI configuration: it requires
+`etc/init.d/S40network` and permits at most 409600 bytes (400 KiB) of net payload
+growth. This candidate therefore fails both `required_path` and
+`max_total_growth_bytes`. Presence and growth are the only enabled rules; the
+permission and symlink findings are reported for human review without an
+inferred security policy. To gate only on the missing file, omit
+`max_total_growth_bytes` from a copy of the policy. Ordinary differences exit 0
+unless a gate is enabled.
+
+No other entry may change. The independent Python inspector reads every tar
+record and hashes regular payloads without extraction or the production scanner;
+it checks all fixture metadata, unchanged endpoints, the entire JSON report,
+and any additional differences. It does not validate boot or runtime behavior.
 
 ## Observed execution
 
-The command above completed end to end on 2026-11-14 with rootfs-diff built from
-accepted CLI commit `9f82ac32fd764392ebe7ad479197c91b4b4a55ea`. The only local
-changes at CLI compilation were this example's non-Go recipe files. The builder
-had networking disabled and used the 17 verified cached sources. Both rootfs
-archives were produced by Buildroot, including the candidate's second fakeroot
-image step. The isolated container retained about 6.4 GiB of inputs/build state;
-the run took about eight minutes on three allocated arm64 CPUs. Actual time and
-peak storage depend on host resources and configuration.
+The documented fresh-build command completed end to end on 2026-11-15 using
+rootfs-diff compiled from commit `0f39dc8d42fe8aa6c8ff59b52ea33eee06c08f19`,
+the immutable v0.1.0 release source. Only non-Go example files were modified at
+CLI compilation. The new non-root arm64 container used the pinned image,
+17 verified cached sources, three CPUs, a 4 GiB memory cap, no host mounts, and
+no build network. It retained about 6.4 GiB of inputs/build state. This was a
+fresh toolchain/build tree, followed by baseline and candidate fakeroot/tar
+image generations through Buildroot; no existing rootfs tar was edited.
 
 | Artifact | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `before.tar` | 2293760 | `9fa91e802f3bd60cc5c6b4b7746f141ed9d336d2690e893795a88386267621fb` |
-| `after.tar` | 2293760 | `82cfcba2243bebedf513c9a10e47d7e4d9a0712d892499a8f3c0b76bb514aa3b` |
+| `before.tar` | 2283520 | `fb40c3185b3fd1d1776dbdd07f78224a4a80825c71edb831a8bdd1bece3c855c` |
+| `after.tar` | 2713600 | `1cb97e7c856f23eaa151bcec339835f382b6243aca92e5b2e947d76b848fbf1a` |
 | `buildroot.config` | 128632 | `18239d37ffed0fafcb40f8a0f25aba23df076e9c2ddcf4301c2542e8789510be` |
 
-The normal comparison exited 0 and repeated JSON bytes matched. Baseline versus
-itself with `--fail-on-change` exited 0 with 371 unchanged entries, zero changes,
-and zero growth. Candidate `--fail-on-change` exited 1. The policy comparison
-exited 1 with both expected violations: growth actual 2 versus limit 1, then
-missing `etc/init.d/S99rootfs-diff-demo`. Python inspection independently checked
-every recorded entry, regular payload hash/total, complete normal/same/gated
-JSON report, and both artifact hashes. No extra compared differences or metadata
-warnings occurred; none were hidden by ignore rules.
+The ordinary comparison exited 0. Baseline versus itself with
+`--fail-on-change` exited 0 with 369 unchanged entries, no changes, and zero
+growth. Both the policy comparison and candidate `--fail-on-change` exited 1.
+Repeated ordinary JSON and policy-enabled text bytes were identical. The
+independent checker verified every tar entry, full normal/same/gated JSON
+report, payload hash and total, endpoint fixture, and archive hash. The result
+was exactly the four expected changes, no additions, no additional differences,
+and no metadata warnings. No ignore rules suppressed anything.
 
-The complete observed ordinary text report was:
+The policy-enabled text command shown above also ran and exited 1 with empty
+stderr. This is its complete, literal CLI output, including both user-defined
+CI failures:
 
 ```text
 rootfs-diff report (schema 1)
 
 Summary:
-  Entries: before 371, after 370
-  Changes: added 0, removed 1, modified 4, unchanged 366
-  Regular payload: before 1701303 bytes, after 1701305 bytes, net +2 bytes
+  Entries: before 369, after 368
+  Changes: added 0, removed 1, modified 3, unchanged 365
+  Regular payload: before 1701934 bytes, after 2131997 bytes, net +430063 bytes
 
 Payload totals count retained regular entries only, excluding hardlink aliases; they are not filesystem or flash usage.
 
 Positive growth (showing 1 of 1):
-  "usr/share/rootfs-diff-demo/data": +19 bytes
+  "usr/lib/libexample.so": +430080 bytes
 
-Changes (5):
-  removed "etc/init.d/S99rootfs-diff-demo"
+Changes (4):
+  modified "etc/device.conf"
+    Changed fields: mode
+    Before: kind=regular mode=0640 uid=0 gid=0 size=12 sha256="d370b5e9d3bb3df60181267a07d33b0258ae725346bf6689416d76c643129ab7"
+    After: kind=regular mode=0666 uid=0 gid=0 size=12 sha256="d370b5e9d3bb3df60181267a07d33b0258ae725346bf6689416d76c643129ab7"
+  removed "etc/init.d/S40network"
     Before: kind=regular mode=0755 uid=0 gid=0 size=17 sha256="306c6ca7407560340797866e077e053627ad409277d1b9da58106fce4cf717cb"
     After: absent
-  modified "etc/rootfs-diff-demo/config"
-    Changed fields: sha256
-    Before: kind=regular mode=0644 uid=0 gid=0 size=12 sha256="e372999e237ce6db7cfe16185902221c74c4f875eb2f239345d4a7712336fd6f"
-    After: kind=regular mode=0644 uid=0 gid=0 size=12 sha256="62f9ab0dcedf785ebb2a379188877fd9fdfd66084c68dddac5ba0ef2611df7d5"
-  modified "etc/rootfs-diff-demo/current"
+  modified "usr/bin/device-agent"
     Changed fields: link_target
-    Before: kind=symlink mode=0777 uid=0 gid=0 link_target="config"
-    After: kind=symlink mode=0777 uid=0 gid=0 link_target="/etc/rootfs-diff-demo/config"
-  modified "usr/share/rootfs-diff-demo/data"
+    Before: kind=symlink mode=0777 uid=0 gid=0 link_target="agent-v1"
+    After: kind=symlink mode=0777 uid=0 gid=0 link_target="agent-v2"
+  modified "usr/lib/libexample.so"
     Changed fields: size, sha256
-    Before: kind=regular mode=0644 uid=0 gid=0 size=5 sha256="f34848ca92665c342abd5816c9e3eda0e82180671195362bcd0080544a3bc2ac"
-    After: kind=regular mode=0644 uid=0 gid=0 size=24 sha256="0890808af31800ff7d09d149176b25b167a721dc27ff8ece66744f84c14e71ae"
-  modified "usr/share/rootfs-diff-demo/tool"
-    Changed fields: mode
-    Before: kind=regular mode=0755 uid=0 gid=0 size=16 sha256="133bcd54c5814c553cf545a8b0acc226e2356fccaa90af2937b33321d1f6f00f"
-    After: kind=regular mode=0700 uid=0 gid=0 size=16 sha256="133bcd54c5814c553cf545a8b0acc226e2356fccaa90af2937b33321d1f6f00f"
+    Before: kind=regular mode=0644 uid=0 gid=0 size=1024 sha256="5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef"
+    After: kind=regular mode=0644 uid=0 gid=0 size=431104 sha256="4573bfb5a93feb21d721fc7a5b9044aa065c53e9d97396368ac8c7c391078682"
 
-Policy violations (0):
-  None recorded.
+Policy violations (2):
+  max_total_growth_bytes: net growth 430063 bytes exceeds limit 409600 bytes
+  required_path: missing explicit candidate path "etc/init.d/S40network"
 
 Warnings (0):
   None recorded.
@@ -215,11 +243,13 @@ Metadata exclusions:
 These metadata are not compared. No changes does not establish firmware equivalence, bootability, compatibility, or security.
 ```
 
-Archive hashes identify this execution. The recipe pins inputs and fixes build
-paths to improve reproducibility, but this single execution does not establish
-bit-identical outputs across other build hosts, output paths, toolchains, or
-Buildroot releases. The asserted result is the five controlled artifact changes
-and independently checked totals, not a boot or security verdict.
+Archive hashes identify this execution. Pinned inputs and fixed build paths
+improve reproducibility, but this execution does not establish bit-identical
+outputs across other hosts or Buildroot releases. The finding about
+`libexample.so` measures recorded payload growth in deliberately non-ELF data;
+it says nothing about ABI compatibility, runtime behavior, or bootability.
+The previous demonstration's source and documented results remain available in the
+immutable v0.1.0 tag rather than being relabeled as this new execution.
 
 ## Cleanup
 
