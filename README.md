@@ -40,7 +40,7 @@ On the real archive pair, this policy returns **1 with a complete report** and o
 
 ## Install and quickstart
 
-Download [v0.1.0 binaries and checksums](https://github.com/Azhovan/rootfs-diff/releases/tag/v0.1.0) for Linux or macOS on amd64/arm64, or build from source with Go **1.27.4** (module minimum **1.27.0**). Choose the binary for the host running the command; firmware architecture does not matter because archive contents are never executed. Public clone/install instructions are in the [installation guide](docs/installation.md).
+For the Apache-2.0 release v0.1.1, download [binaries and checksums](https://github.com/Azhovan/rootfs-diff/releases/tag/v0.1.1) after publication, or build from source with Go **1.27.4** (module minimum **1.27.0**). Supported hosts are Linux and macOS on amd64/arm64. Choose the binary for the host running the command; firmware architecture does not matter because archive contents are never executed. Public clone/install instructions are in the [installation guide](docs/installation.md).
 
 ```sh
 git clone https://github.com/Azhovan/rootfs-diff.git
@@ -86,3 +86,7 @@ This tool does not establish bootability, runtime correctness, OTA compatibility
 [Yocto buildhistory](https://docs.yoctoproject.org/dev/dev-manual/build-quality.html#build-history-image-information) already records package/image information and file permissions, ownership, sizes and symlinks. rootfs-diff overlaps with that file review while consuming standalone tar artifacts and applying explicit user gates across build systems. Keep buildhistory's package, dependency and build context alongside the artifact report. [diffoscope](https://diffoscope.org/) provides broader artifact comparisons.
 
 The import path is `github.com/Azhovan/rootfs-diff`, package `rootfsdiff`. Development follows the [v0.1 contract](docs/v0.1-contract.md) and [delivery issue](https://github.com/Azhovan/rootfs-diff/issues/1).
+
+## License
+
+rootfs-diff is licensed under the [Apache License, Version 2.0](LICENSE) (`Apache-2.0`). Third-party components, including Go and Buildroot, retain their own licenses and notices.
