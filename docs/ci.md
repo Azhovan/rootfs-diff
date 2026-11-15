@@ -1,10 +1,10 @@
 # CI usage
 
-This is an ordinary workflow step, not a custom GitHub Action. Prepare the source/toolchain, build `./bin/rootfs-diff`, and supply `baseline.tar`, `candidate.tar` and `policy.json` before these steps. Archive creation/download belongs to your build pipeline, not to rootfs-diff.
+You can run rootfs-diff in a GitHub Actions workflow using the steps below. First set up Go and the source checkout, build `./bin/rootfs-diff`, and provide `baseline.tar`, `candidate.tar` and `policy.json`. Your build pipeline must create or download the archives before the comparison runs.
 
 ## Fail CI for a missing required path
 
-For example, save this explicit project rule as `policy.json` to require the candidate archive to record the network startup path:
+To require the network startup path in the candidate archive, save this policy as `policy.json`:
 
 ```json
 {
@@ -13,15 +13,15 @@ For example, save this explicit project rule as `policy.json` to require the can
 }
 ```
 
-Paths use canonical root-relative spelling, without a leading `/`. A missing explicit candidate entry produces a `required_path` violation and exit **1 with a complete report**. Ignore rules do not suppress required-path checks. Presence alone passes; this rule does not follow links or prove that a startup script will execute correctly. No growth gate is enabled by this policy.
+Paths are relative to the root filesystem and have no leading `/`. If the candidate archive does not explicitly record the required path, the command reports a `required_path` violation and exits with **code 1 and a complete report**. An ignore rule does not suppress this check. Any recorded entry at the path passes, including a symlink; the check does not follow links or establish that the startup script will run correctly. This policy sets no growth limit.
 
-On the [real Buildroot archive pair](../examples/buildroot/README.md#observed-execution), this required-path-only policy returns exit 1 with one `required_path` violation and a complete report. The full proof's literal gated report uses a separate policy with both required presence and `max_total_growth_bytes: 409600`, so it has two violations.
+For the [Buildroot example's archive pair](../examples/buildroot/README.md#observed-execution), this policy returns exit code 1 with one `required_path` violation. The full example uses a different policy that also sets `max_total_growth_bytes` to `409600`, so its report lists two violations.
 
-That comparison's `libexample.so` payload increases by 420 KiB (430,080 bytes). Removing the 17-byte startup stub makes net growth 430,063 bytes. Use the report's `net_growth_bytes` when selecting a growth budget; per-file growth and net growth are different quantities.
+In that comparison, `libexample.so` grows by 420 KiB (430,080 bytes). The 17-byte startup stub is also removed, leaving net growth of 430,063 bytes. Use the report's `net_growth_bytes` when choosing a growth limit: it accounts for both increases and reductions across the comparison.
 
 ## Preserve the tool's exit status
 
-The comparison can return 0 with ordinary differences, 1 with a configured gate failure, or 2 with an operational failure. Capture the actual executable's status. `go run` and a pipeline ending in `tee` are unsuitable when the exact 0/1/2 result is needed.
+The command returns exit code 0 when the comparison and all enabled checks pass, 1 when a check fails, and 2 when input or an operation fails. Differences alone return 0. Run the built executable and capture its exit code directly. `go run` does not preserve the command's exact exit code, and a pipeline ending in `tee` can report `tee`'s status instead.
 
 ```yaml
 - name: Review candidate rootfs
@@ -62,15 +62,17 @@ The comparison can return 0 with ordinary differences, 1 with a configured gate 
     if-no-files-found: error
 ```
 
-The comparison remains a failed step for exits 1 and 2. No `continue-on-error` or trailing successful command hides its status. The output descriptor is opened before status capture; a destination-open failure stops the shell instead of masquerading as a tool gate failure. A gate failure still saves a complete report and summary. On exit 2, the partial file is kept separate and is never uploaded as a completed report. Stderr remains in the job log. An interrupted process also cannot turn the step green.
+The step fails for exit codes 1 and 2 and for an interrupted process. It saves a complete report and adds it to the job summary for codes 0 and 1. For code 2, it keeps any partial output separate and does not upload it as a completed report. Error messages remain in the job log.
 
-For JSON artifacts, select `--format json`, use a `.json` completed filename, and write only a short status to the job summary. Check exit 0/1 before parsing. Running a separate Markdown comparison for a human summary requires checking that command's status too.
+The shell opens the output file before capturing the command's status. If it cannot open the destination, the step stops rather than mistaking that failure for a policy violation. The final `exit "$status"` preserves the comparison's result; adding `continue-on-error` or ending with a successful command would hide a failure.
 
-GitHub documents [workflow conditions](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax), [job summaries](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-commands#adding-a-job-summary) and the standard [artifact uploader](https://github.com/actions/upload-artifact). Configure read access if your own source or input archives are private. Do not include credentials or whole firmware build trees in reports/artifacts.
+To save JSON, select `--format json`, change the completed report's extension to `.json`, and write a short status message to the job summary instead of the JSON. Parse the report only after checking for exit code 0 or 1. If you run a separate Markdown comparison for the summary, check that command's exit code too.
+
+See GitHub's documentation for [workflow conditions](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax), [job summaries](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-commands#adding-a-job-summary) and [uploading artifacts](https://github.com/actions/upload-artifact). Configure read access if your source or input archives are private. Keep credentials and firmware build trees out of report artifacts.
 
 ## Repository verification
 
-The [repository workflow](../.github/workflows/ci.yml) runs on pushes to `main` and manual dispatch with Go **1.27.4**. Both Linux and macOS run the same offline formatting/vet/test/build/example entry point and race checks. Linux also runs two 30-second fuzz checks with two workers and four CGO-free cross-builds. Tests include public-package examples and actual executable subprocess checks.
+The [repository workflow](../.github/workflows/ci.yml) runs on pushes to `main` and can be started manually. It uses Go **1.27.4**. On both Linux and macOS, it runs the offline verification script and race checks. The tests include public-package examples and subprocess tests of the built executable. Linux also runs two 30-second fuzz checks with two workers, then cross-compiles for four platforms with CGO disabled.
 
 From the repository root after toolchain setup:
 
@@ -86,6 +88,6 @@ CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o bin/rootfs-diff-darwin-amd64 
 CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o bin/rootfs-diff-darwin-arm64 ./cmd/rootfs-diff
 ```
 
-`verify.sh` checks formatting without changing files, runs `go vet ./...` and `go test ./...`, builds the CLI and runs the complete library example. `GOMAXPROCS=2` bounds fuzz worker concurrency; each run still uses the full 30-second budget. To forbid downloads during local checks, use the offline settings in [installation](installation.md#offline-checks) with an already installed toolchain.
+`verify.sh` checks formatting without changing files, runs `go vet ./...` and `go test ./...`, builds the command and runs the complete library example. `GOMAXPROCS=2` limits the number of concurrent fuzz workers; each fuzz check still runs for the full 30 seconds. To disable downloads during local checks, install the toolchain first and use the [offline settings](installation.md#offline-checks).
 
-Cross-compilation demonstrates build portability, not execution on that target. Native Linux/macOS workflow results supply runtime test evidence for those hosts; local checks alone do not establish a green workflow. The [synthetic example](../examples/synthetic/README.md) documents a small reproducible comparison. The [executed pinned Buildroot demonstration](../examples/buildroot/README.md) has separate prerequisites and remains outside the fast workflow; its archive findings do not establish firmware runtime behavior.
+A successful cross-build shows that the command compiles for that platform. Runtime tests run on the native Linux and macOS workflow runners; check the workflow results as well as local results. The [synthetic example](../examples/synthetic/README.md) provides a small comparison you can reproduce. The [Buildroot demonstration](../examples/buildroot/README.md) has separate prerequisites and is not part of the routine workflow. It checks archive differences without booting or running the firmware.

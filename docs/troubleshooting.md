@@ -1,47 +1,53 @@
 # Troubleshooting
 
-These diagnostics explain v0.1 behavior. Library callers can inspect [typed error categories](library.md#typed-errors); CLI callers should always check exits 0, 1 and 2.
+Use the sections below to diagnose common problems in v0.1. If you use the Go library, inspect the [typed errors](library.md#typed-errors) for details. If you use the command-line tool, check its [exit code](cli.md#output-and-exit-codes) before using the report.
 
 ## Private access
 
-This upstream repository is public; it needs no GitHub credentials or `GOPRIVATE` pattern. For repository-not-found, authentication or module-proxy errors with a private copy/fork, first verify the Git credential setup has read access to that repository and the requested module path points to it. An authenticated GitHub CLI session can configure HTTPS Git access with `gh auth setup-git`. An SSH login alone does not configure HTTPS module downloads; use the Git transport/credential configuration that works for your environment.
+The upstream repository is public and requires neither GitHub credentials nor a `GOPRIVATE` setting. If a private copy or fork produces a repository-not-found, authentication or module-proxy error, first check that your Git credentials have read access and that the module path points to the intended repository.
 
-For the private module, set `GOPRIVATE` before the initial lookup and preserve other configured patterns. If `GONOPROXY`/`GONOSUMDB` are independently set, make them consistent with your private-module routing. An unexpected public proxy or checksum lookup for a private path usually means those settings do not match. Public upstream proxy/checksum lookups are normal. `GOPRIVATE` never supplies credentials. See [installation](installation.md).
+If you are signed in through the GitHub CLI, run `gh auth setup-git` to configure HTTPS Git access. An SSH login does not configure HTTPS module downloads; configure credentials for the transport your Git setup uses.
 
-Offline checks also need a locally installed Go toolchain satisfying `go.mod`. Install pinned Go 1.27.4 before setting `GOTOOLCHAIN=local` or disconnecting. A toolchain download failure is not an archive error.
+Set `GOPRIVATE` before fetching a private module for the first time, preserving other configured patterns. If you have set `GONOPROXY` or `GONOSUMDB` separately, make sure those settings also cover the private module. An unexpected public proxy or checksum lookup for a private path usually means the settings do not match. Those lookups are normal for the public upstream module. `GOPRIVATE` controls how Go fetches modules; it does not supply credentials. See [installation](installation.md).
+
+For offline checks, install a Go toolchain that satisfies `go.mod` before setting `GOTOOLCHAIN=local` or disconnecting. Use Go 1.27.4 to match the repository. A toolchain download error occurs before archive scanning begins.
 
 ## Unsupported or corrupt input
 
-Use complete tar or tar.gz rootfs archives. A `.tar` extension does not turn an ext4, SquashFS, cpio, OCI, ZIP or raw firmware image into tar. Gzip detection uses bytes rather than the extension. Supply two local regular files to the CLI, and put flags before filenames.
+Supply complete tar or tar.gz root filesystem archives. Renaming an ext4, SquashFS, cpio, OCI, ZIP or raw firmware image to end in `.tar` does not make it a supported input. The tool detects gzip from the file's bytes. The CLI accepts two local regular files, with all flags before the filenames.
 
-Unsupported entry kinds, global PAX headers, GNU/SCHILY sparse data and non-regular payloads fail. Malformed headers, truncated payloads, gzip checksum errors and nonzero trailing decoded bytes also fail. Recreate or recopy the archive from a trustworthy build output rather than interpreting a failed scan as a partial success. Do not strip metadata to hide an unsupported feature without understanding the resulting loss.
+A scan fails on unsupported entry kinds, global PAX headers, GNU/SCHILY sparse data, or payload bytes attached to anything other than a regular file. Malformed headers, truncated file contents, gzip checksum errors and nonzero trailing decoded bytes also cause failure. Recreate or recopy the archive from a trustworthy build output and try again. A failed scan provides no usable partial result. Removing unsupported metadata changes the archive, so first understand what would be lost.
 
 ## Invalid paths and hardlinks
 
-Absolute entry paths, traversal segments, invalid UTF-8 and duplicate normalized paths are invalid. `etc/device.conf` and `./etc//device.conf` name the same normalized entry and cannot both occur. An explicitly recorded non-directory cannot be another entry's ancestor. Fix archive creation rather than extracting the data to work around these checks.
+Archive entry paths must be valid UTF-8 and must not be absolute or contain `..` segments. Two entries cannot normalize to the same path: for example, `etc/device.conf` and `./etc//device.conf` cannot both appear. If the archive records an ancestor of another entry, that ancestor must be a directory. For example, a regular file named `etc` cannot also have a child named `etc/device.conf`. Correct these paths when creating the archive.
 
-Ignore and required-path values must already be canonical: no leading slash, `./`, repeated separators or trailing slash. A hardlink must end at a recorded regular entry; missing targets, cycles and directory/symlink endpoints fail. Symlink targets are preserved without following them, so an absolute symlink target is not by itself an invalid entry path.
+Paths in ignore rules and policies must already be canonical, with no leading slash, `.` or `..` segments, repeated separators or trailing slash.
+
+Every hardlink chain must end at a recorded regular file. Missing targets, cycles and chains ending at directories or symlinks cause failure. Symlink targets follow a different rule: they are preserved as written and never followed. An absolute symlink target is therefore allowed, even though an absolute entry path is invalid.
 
 ## Limits
 
-A limit failure identifies the exhausted budget. Go callers can inspect `*rootfsdiff.LimitError`; `Actual` is the first observed excess and may be smaller than the unread input's eventual total. Inspect the archive producer and choose a justified positive override if it is expected to be larger. Never treat a failed manifest as complete.
+A limit error identifies which limit was exceeded. In Go, inspect `*rootfsdiff.LimitError` for details. Its `Actual` field is the first observed value above the limit; the final total could be larger if input remains unread. Check how the archive was produced before choosing a larger positive limit. A failed scan does not return a complete manifest.
 
-`--max-archive-bytes` counts decoded headers, extensions and padding as well as payloads, not the compressed file size. `--max-path-bytes` counts UTF-8 bytes independently for each decoded entry path/target, not characters. Go option zero means default; explicit CLI zero is invalid. See [limits](semantics.md#resource-limits).
+`--max-archive-bytes` counts decoded headers, metadata extensions, padding and file contents. It does not measure the compressed file's size. `--max-path-bytes` counts UTF-8 bytes, rather than characters, for each decoded entry path or link target separately. Zero selects the default in Go options but is invalid as a command-line override. See [resource limits](semantics.md#resource-limits).
 
 ## Metadata warnings and unexpected changes
 
-`uncompared_metadata` names an encountered key whose value is not compared. It is a warning rather than a policy violation. Its absence does not change the standard exclusions listed in every report. Warning path `.` refers to metadata on an ignored root directory record. Warnings remain for ignored paths.
+An `uncompared_metadata` warning identifies a metadata key whose value is not compared. It does not fail a policy check. Even when there are no warnings, the standard exclusions listed in the report still apply. A warning path of `.` refers to metadata on a root directory record that the scanner otherwise ignores. Comparison ignore rules do not hide warnings.
 
-Check numeric UID/GID and the full `07777` mode bits when content appears unchanged. Hardlinks inherit terminal regular metadata/content, so one payload change can affect several paths. Adding/removing an explicit directory record is a change even if its children are unchanged. Timestamp or compression changes alone are excluded. Payload growth is not disk, flash, compressed archive or OTA transfer growth.
+If file contents appear unchanged, check numeric UID/GID and all permission bits, including the special bits in the `07777` mask. Hardlinks inherit the content and metadata of the regular file at the end of their chain, so changing one file can affect several reported paths. Adding or removing a directory record is also a change, even if its children are unchanged. Timestamp or compression changes alone produce no difference.
+
+Reported growth measures uncompressed regular-file contents. It does not measure disk usage, flash usage, compressed archive size or over-the-air transfer size.
 
 ## Required paths and gate failures
 
-A required path must be an explicit canonical candidate entry. An implicit parent directory does not count. A symlink counts as present without proving its target exists or can run. Ignores cannot bypass this check. Confirm the exact path spelling and candidate archive records.
+A required path must be explicitly recorded in the candidate archive, using the canonical spelling given in the policy. A parent directory implied by a child's path does not count unless the archive records it separately. A symlink counts as present without proving that its target exists or can run. Ignore rules do not bypass this check. Check the path's exact spelling and the entries in the candidate archive.
 
-Ordinary differences return 0 unless `--fail-on-change` or a policy fails. Exit 1 is a completed comparison with a failed enabled check and a complete report. A growth limit tests signed net growth after ignores; equality and shrinkage pass. Inspect `violations` for policy details and `changes` for fail-on-change results.
+Differences alone return exit code 0. Code 1 means an enabled check failed, and the comparison still produced a complete report. A policy can require paths or limit net growth; `--fail-on-change` fails on any change left after ignores. Growth equal to the limit passes, as does a reduction in total size. Look in `violations` for failed policy checks and in `changes` for the changes that caused `--fail-on-change` to fail.
 
 ## Output and writer errors
 
-Parse, scan and compare failures produce no report bytes, but shell redirection may have created an empty destination. Writer failures can leave partial JSON, Markdown or text and return exit 2. Examples include a full destination filesystem or a downstream reader that closes early. Check the command's exit code before parsing or promoting a report; do not equate file existence with completion.
+If parsing, scanning or comparison fails, the command writes no report bytes. Shell redirection may still create an empty output file. A failure while writing, such as a full destination filesystem or a downstream reader that closes early, can leave a partial report and returns exit code 2. Check the exit code before parsing or saving the output as a completed report.
 
-Go callers must check `report.Write`'s error and any relevant file-close error. Underlying I/O errors remain discoverable through wrapping. For CI, avoid a final successful command or `tee` hiding the tool's exit; use the [status-preserving example](ci.md).
+In Go, check the error returned by `report.Write` and any relevant error when closing the output file. Wrapped I/O errors remain available for inspection. In CI, use the [exit-status example](ci.md) so a later successful command or `tee` does not hide a failed comparison.

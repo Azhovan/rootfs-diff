@@ -1,8 +1,8 @@
 # Go library
 
-Import `github.com/Azhovan/rootfs-diff` as package `rootfsdiff`. The root package owns scanning, comparison, policy evaluation and the shared models. The separate public `github.com/Azhovan/rootfs-diff/report` package writes reports; core code does not depend on rendering or process behavior.
+Import `github.com/Azhovan/rootfs-diff` as package `rootfsdiff` to scan archives, compare their contents and evaluate policies. This package also defines the shared data models. Import `github.com/Azhovan/rootfs-diff/report` to write a report. The root package works independently of report formatting and command-line behavior.
 
-The [runnable library example](../examples/library/README.md) imports the public packages and demonstrates the complete scan-to-report flow. See [module setup](installation.md#use-the-go-module) before adding the dependency to your own module.
+The [runnable library example](../examples/library/README.md) shows the complete process, from scanning archives to writing a report. See [module setup](installation.md#use-the-go-module) to add the dependency to your own module.
 
 ## Operations
 
@@ -13,9 +13,13 @@ ParsePolicy(io.Reader) (Policy, error)
 Evaluate(after Manifest, diff Diff, policy Policy) ([]Violation, error)
 ```
 
-`Scan` consumes one tar/tar.gz stream and returns explicit canonical entries and metadata warnings. Use `ScanOptions{}` for defaults or positive field overrides. `Compare` validates both manifests and applies `CompareOptions{IgnorePaths: ..., IgnorePrefixes: ...}` symmetrically. `Evaluate` uses the complete candidate manifest for required paths and the supplied diff for net growth after ignores. Keep these values from the same comparison; the evaluator cannot reconstruct an ignored baseline from the diff.
+`Scan` reads one tar or tar.gz stream and returns a manifest: the entries recorded in the archive, with normalized paths and any metadata warnings. Use `ScanOptions{}` for the default limits, or set individual fields to positive values to override them.
 
-Use `ParsePolicy` for untrusted policy input. Ordinary `encoding/json` decoding plus `Policy.Validate` does not supply duplicate-key, unknown-key, required-field, trailing-input and 1 MiB parser checks. `Policy.MaxTotalGrowthBytes` is `*int64`: nil disables the gate, and a pointer to zero enables a no-positive-growth gate.
+`Compare` validates both manifests and returns their differences. It applies `CompareOptions{IgnorePaths: ..., IgnorePrefixes: ...}` to both sides. `Evaluate` checks required paths against the complete candidate manifest and checks net growth using the diff, where ignores have already been applied. Pass the candidate manifest and diff from the same comparison. The diff does not contain enough information to reconstruct an ignored baseline.
+
+Use `ParsePolicy` to read untrusted policy input. It enforces the 1 MiB size limit and rejects duplicate keys, unknown keys, missing required fields and trailing input. Decoding with `encoding/json` and then calling `Policy.Validate` does not perform all of these checks.
+
+`Policy.MaxTotalGrowthBytes` has type `*int64`. A nil pointer disables the growth check; a pointer to zero prohibits positive net growth.
 
 The public renderer's signature is:
 
@@ -23,7 +27,7 @@ The public renderer's signature is:
 report.Write(io.Writer, rootfsdiff.Report, report.Format) error
 ```
 
-Use `report.Text`, `report.JSON` or `report.Markdown`; a zero/unknown format is unsupported. Assemble a report from the returned diff and violations:
+Choose `report.Text`, `report.JSON` or `report.Markdown`. A zero or unknown format returns an unsupported-input error. Assemble the report from the diff and violations returned by the library:
 
 ```go
 result := rootfsdiff.Report{
@@ -37,21 +41,25 @@ result := rootfsdiff.Report{
 }
 ```
 
-`MetadataExclusions()` returns a fresh slice with the full fixed list. `Report.Validate` requires it. Validation precedes rendering; output failures still need handling, since a writer may fail after accepting part of a report. The renderer encodes the report in memory, then writes it once; it does not retain archive payloads. The library returns violations as data rather than exiting or inferring a CI failure. The caller decides how those violations and `Diff.Changes` affect its own process.
+`MetadataExclusions()` returns a fresh slice containing the complete list of metadata that is not compared. `Report.Validate` requires that list in every report.
+
+The renderer validates the report, encodes it in memory and writes it once. It does not retain archive file contents. Check the returned error: a writer can fail after accepting part of the report. Policy violations are returned as data. Your application decides whether violations or `Diff.Changes` should cause it to exit with an error.
 
 ## Ownership, validation and concurrency
 
-Readers and writers belong to the caller. Scanning/policy parsing do not close their readers; rendering does not close its writer. Open and close files in the calling application, and handle both operation errors and any relevant close errors there. Stream payloads are consumed, not retained or extracted. To scan again, supply a fresh reader or rewind a seekable one.
+Your application owns its readers and writers. `Scan` and `ParsePolicy` do not close their readers; `report.Write` does not close its writer. Open and close files in your application, and check both operation errors and any relevant close errors. Scanning consumes file contents without retaining or extracting them. To scan again, supply a fresh reader or rewind one that supports seeking.
 
-Scan checks context cancellation between bounded reads. Context cancellation cannot unblock an arbitrary `Read` already in progress. Compare, parse, evaluate and render do not take a context; input budgets and caller-provided I/O behavior bound their work.
+`Scan` reads in bounded chunks and checks for context cancellation between reads. It cannot interrupt a `Read` that is already blocked; the reader must provide its own way to unblock that operation. `Compare`, `ParsePolicy`, `Evaluate` and `report.Write` do not accept a context. Their work depends on the input limits and the behavior of the readers and writers you supply.
 
-Operations do not mutate caller models/options, print, exit or use mutable global options. Independent calls can run concurrently with independent readers/writers and models that callers do not concurrently mutate. Slices and pointers in model structs remain mutable Go values; the API does not synchronize caller writes. Avoid concurrently writing a shared destination or reading the same advancing stream.
+Library operations do not change your models or options, print output, exit the process or use mutable global options. You can run independent calls concurrently if they use separate readers and writers and you do not change their input models at the same time. The slices and pointers in model structs are ordinary mutable Go values; the API does not synchronize your writes. Do not share an advancing input stream or write concurrently to the same destination without your own synchronization.
 
-Caller-built manifests may list entries/warnings in any order. Model paths must already be canonical; `ValidatePath` validates without normalization, host filesystem access or scan length caps. Complete manifest validation checks field applicability, unique paths, explicit ancestors, hardlink closure/effective metadata and checked totals. Produced manifests/diffs are sorted; report/diff validation additionally enforces required output ordering and cross-field consistency. JSON marshaling does not validate.
+If you build a manifest yourself, its entries and warnings can be in any order, but its paths must already be canonical. `ValidatePath` checks path spelling without normalizing it, accessing the host filesystem or applying scan length limits. Manifest validation checks that fields are appropriate for each entry kind, paths are unique, recorded ancestors are directories, hardlink chains resolve to regular entries with matching effective metadata, and totals do not overflow.
+
+Manifests and diffs produced by the library are sorted. Validation of diffs and reports also checks the required output order and consistency between fields. Marshaling a value to JSON does not validate it.
 
 ## Typed errors
 
-Use `errors.Is` for `rootfsdiff.ErrInvalidInput`, `ErrUnsupportedInput` and `ErrLimitExceeded`. Use `errors.As` for detailed `*rootfsdiff.Error` operation/archive-path context and `*rootfsdiff.LimitError` budget fields. Underlying I/O and context error identities are preserved through wrapping.
+Use `errors.Is` to check for `rootfsdiff.ErrInvalidInput`, `ErrUnsupportedInput` or `ErrLimitExceeded`. Use `errors.As` to inspect the operation and archive path in a `*rootfsdiff.Error`, or the limit details in a `*rootfsdiff.LimitError`. Wrapped I/O and context errors remain available through `errors.Is` and `errors.As`.
 
 ```go
 var limit *rootfsdiff.LimitError
@@ -71,8 +79,10 @@ default:
 }
 ```
 
-This snippet illustrates classification inside an error branch. Test cancellation or other underlying sentinels independently if they take precedence in your application; an I/O/cancellation error may also carry `*Error` context. `LimitError.Actual` is the first observed value beyond `Maximum`, not necessarily the size of unread input. Never use a manifest returned with a scan error as a successful partial result.
+Use this snippet after an operation returns a non-nil error. An I/O or cancellation error can also be wrapped in `*Error`. If your application needs to handle cancellation first, move that case before the `errors.As(err, &input)` case.
+
+`LimitError.Actual` is the first observed value above `Maximum`; it may be smaller than the eventual total if input remains unread. When `Scan` returns an error, do not use the returned manifest as a successful partial result.
 
 ## Compatibility
 
-The module is in 0.x development; pin an audited commit/resolved module version and review API changes when updating. JSON has its own explicit `schema_version`, currently 1. Check it when consuming reports. Schema changes require coordinated model, fixture and consumer updates. See [model fields](models.md), [report output](reports.md) and the [semantic contract](v0.1-contract.md).
+The module is in 0.x development. Pin a commit or resolved module version you have reviewed, and check for API changes when updating it. JSON reports have a separate `schema_version`, currently 1; check this field before consuming a report. Schema changes require corresponding updates to models, fixtures and consumers. See [model fields](models.md), [report output](reports.md) and the [semantic contract](v0.1-contract.md).

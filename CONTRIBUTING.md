@@ -1,16 +1,18 @@
 # Contributor setup
 
-Linux and macOS are supported hosts. The repository pins Go **1.27.4**.
-The module minimum is Go **1.27.0**. `.go-version` pins the exact
-development version and `go.mod` requests `toolchain go1.27.4`.
+You can develop and run rootfs-diff on Linux or macOS. Use Go **1.27.4**
+for reproducible development builds. This version is recorded in `.go-version`
+and requested by the `toolchain go1.27.4` directive in `go.mod`. The module's
+minimum Go version is **1.27.0**.
 
 Install Go 1.27.4 from [go.dev/dl](https://go.dev/dl/), or let an existing Go
-installation download it once with `GOTOOLCHAIN=go1.27.4 go version`. Once the
-toolchain is installed, the checks below need no network. Runtime code and tests
-use only the standard library. No hardware, root access, Docker, mounting or host
-tar command is needed for routine tests. The [Buildroot demonstration](examples/buildroot/README.md)
-has separate Linux/build/download prerequisites; the [synthetic example](examples/synthetic/README.md)
-provides a small reproducible comparison without a Buildroot build.
+installation download it with `GOTOOLCHAIN=go1.27.4 go version`. After this
+one-time setup, you can run the checks below without a network connection.
+The application and its tests use only the Go standard library. Routine tests
+need no hardware, root access, Docker, mounts or system `tar` command.
+The [Buildroot demonstration](examples/buildroot/README.md) has separate Linux
+build requirements and downloads. Try the [synthetic example](examples/synthetic/README.md)
+for a small comparison that does not require a Buildroot build.
 
 Clone this public repository without authentication:
 
@@ -21,15 +23,16 @@ go version
 ./scripts/verify.sh
 ```
 
-Library consumers can fetch the public module normally from their own Go module:
+To use the public library from your own Go module, run:
 
 ```sh
 go get github.com/Azhovan/rootfs-diff@main
 ```
 
-The upstream module needs no `GOPRIVATE` setting. For private copies or forks,
-see [private-module setup](docs/installation.md#private-copies-and-forks), including
-preserving existing effective patterns. Keep credentials out of URLs and source.
+You do not need to set `GOPRIVATE` for the upstream module. For a private copy
+or fork, follow the [private-module setup](docs/installation.md#private-copies-and-forks)
+and preserve any existing `GOPRIVATE` patterns. Keep credentials out of URLs
+and source files.
 
 Useful commands from the repository root:
 
@@ -42,18 +45,20 @@ go doc .
 GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local ./scripts/verify.sh
 ```
 
-The last command requires Go 1.27.0 or newer already installed; use the pinned
-1.27.4 for reproducible development. It proves checks do not fetch dependencies.
+The last command requires Go 1.27.0 or newer to be installed locally; use
+1.27.4 for reproducible development. It disables dependency downloads during
+verification.
 The verification script checks formatting without modifying files, runs vet and
 tests (including public examples and executable subprocess tests), builds the CLI
 and runs the complete library example. See [CI and full checks](docs/ci.md#repository-verification)
 for race, bounded fuzz and four cross-build commands.
 
 `bin/`, `tmp/`, `artifacts/`, `coverage.out` and `*.test` are ignored locations for
-local outputs. Do not commit generated images, toolchains or build trees.
+local outputs. Keep generated images, toolchains and build trees out of commits.
 
-Shared model, module and verification changes need coordination with their
-component consumers. Tests live with each component. Author expected manifests
-and reports independently of production scanner/comparison code; the
-[archive fixture helper](internal/testfixture/README.md) writes small deterministic
-inputs using Go's standard archive writers.
+Coordinate changes to shared models, the module and verification scripts with
+the people working on the components that use them. Keep tests with the
+component they cover. Write expected manifests and reports independently of
+the scanner and comparison code being tested. The
+[archive fixture helper](internal/testfixture/README.md) creates small,
+deterministic inputs using Go's standard archive writers.
