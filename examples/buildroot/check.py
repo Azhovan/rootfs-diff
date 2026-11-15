@@ -14,12 +14,14 @@ import tarfile
 from pathlib import Path
 
 
-STARTUP = "etc/init.d/S99rootfs-diff-demo"
-CONFIG = "etc/rootfs-diff-demo/config"
-CURRENT = "etc/rootfs-diff-demo/current"
-DATA = "usr/share/rootfs-diff-demo/data"
-TOOL = "usr/share/rootfs-diff-demo/tool"
-CONTROLLED_PATHS = {STARTUP, CONFIG, CURRENT, DATA, TOOL}
+STARTUP = "etc/init.d/S40network"
+CONFIG = "etc/device.conf"
+AGENT = "usr/bin/device-agent"
+LIBRARY = "usr/lib/libexample.so"
+AGENT_V1 = "usr/bin/agent-v1"
+AGENT_V2 = "usr/bin/agent-v2"
+CONTROLLED_PATHS = {STARTUP, CONFIG, AGENT, LIBRARY}
+FIXTURE_PATHS = CONTROLLED_PATHS | {AGENT_V1, AGENT_V2}
 EXCLUSIONS = [
     "acls", "directory_sizes", "file_capabilities", "selinux_labels",
     "timestamps", "unrecognized_pax_metadata", "user_group_names", "xattrs",
@@ -157,18 +159,22 @@ def fixture_entry(path, mode, payload=None, target=None):
 
 
 def controlled_entries():
+    endpoints = {
+        AGENT_V1: fixture_entry(AGENT_V1, 0o755, b"#!/bin/sh\n# demo agent-v1\nexit 0\n"),
+        AGENT_V2: fixture_entry(AGENT_V2, 0o755, b"#!/bin/sh\n# demo agent-v2\nexit 0\n"),
+    }
     before = {
+        **endpoints,
         STARTUP: fixture_entry(STARTUP, 0o755, b"#!/bin/sh\nexit 0\n"),
-        CONFIG: fixture_entry(CONFIG, 0o644, b"feature=off\n"),
-        CURRENT: fixture_entry(CURRENT, 0o777, target="config"),
-        DATA: fixture_entry(DATA, 0o644, b"base\n"),
-        TOOL: fixture_entry(TOOL, 0o755, b"demo executable\n"),
+        CONFIG: fixture_entry(CONFIG, 0o640, b"device=demo\n"),
+        AGENT: fixture_entry(AGENT, 0o777, target="agent-v1"),
+        LIBRARY: fixture_entry(LIBRARY, 0o644, b"\0" * 1024),
     }
     after = {
-        CONFIG: fixture_entry(CONFIG, 0o644, b"feature=on!\n"),
-        CURRENT: fixture_entry(CURRENT, 0o777, target="/etc/rootfs-diff-demo/config"),
-        DATA: fixture_entry(DATA, 0o644, b"base\nadditional payload\n"),
-        TOOL: fixture_entry(TOOL, 0o700, b"demo executable\n"),
+        **endpoints,
+        CONFIG: fixture_entry(CONFIG, 0o666, b"device=demo\n"),
+        AGENT: fixture_entry(AGENT, 0o777, target="agent-v2"),
+        LIBRARY: fixture_entry(LIBRARY, 0o644, b"\0" * (421 * 1024)),
     }
     return before, after
 
@@ -176,8 +182,8 @@ def controlled_entries():
 def report_expected(before, after, warnings, same=False, gated=False):
     changes = []
     if not same:
-        fields = {CONFIG: ["sha256"], CURRENT: ["link_target"],
-                  DATA: ["size", "sha256"], TOOL: ["mode"]}
+        fields = {CONFIG: ["mode"], AGENT: ["link_target"],
+                  LIBRARY: ["size", "sha256"]}
         for path in sorted(CONTROLLED_PATHS):
             changes.append({
                 "path": path, "kind": "removed" if path == STARTUP else "modified",
@@ -190,15 +196,15 @@ def report_expected(before, after, warnings, same=False, gated=False):
         "schema_version": 1,
         "summary": {
             "before_entries": len(before), "after_entries": len(after),
-            "added": 0, "removed": 0 if same else 1, "modified": 0 if same else 4,
-            "unchanged": len(before) if same else len(before) - 5,
+            "added": 0, "removed": 0 if same else 1, "modified": 0 if same else 3,
+            "unchanged": len(before) if same else len(before) - 4,
             "before_payload_bytes": before_bytes, "after_payload_bytes": after_bytes,
             "net_growth_bytes": after_bytes - before_bytes,
         },
         "changes": changes,
-        "positive_growth": [] if same else [{"path": DATA, "bytes": 19}],
+        "positive_growth": [] if same else [{"path": LIBRARY, "bytes": 430080}],
         "violations": [
-            {"rule": "max_total_growth_bytes", "path": "", "limit": 1, "actual": 2},
+            {"rule": "max_total_growth_bytes", "path": "", "limit": 409600, "actual": 430063},
             {"rule": "required_path", "path": STARTUP, "limit": None, "actual": None},
         ] if gated else [],
         "warnings": warnings, "metadata_exclusions": EXCLUSIONS,
@@ -245,16 +251,16 @@ def main():
     before, before_warnings = inspect_archive(args.before)
     after, after_warnings = inspect_archive(args.after)
     expected_before, expected_after = controlled_entries()
-    expect({p: e for p, e in before.items() if p in CONTROLLED_PATHS},
-           expected_before, "controlled before archive entries")
-    expect({p: e for p, e in after.items() if p in CONTROLLED_PATHS},
-           expected_after, "controlled after archive entries")
+    expect({p: e for p, e in before.items() if p in FIXTURE_PATHS},
+           expected_before, "fixture before archive entries and agent endpoints")
+    expect({p: e for p, e in after.items() if p in FIXTURE_PATHS},
+           expected_after, "fixture after archive entries and agent endpoints")
     expect({p: e for p, e in after.items() if p not in CONTROLLED_PATHS},
            {p: e for p, e in before.items() if p not in CONTROLLED_PATHS},
            "all other compared archive entries")
     warnings = sourced_warnings(before_warnings, after_warnings)
     expected = report_expected(before, after, warnings)
-    expect(expected["summary"]["net_growth_bytes"], 2, "independent net growth")
+    expect(expected["summary"]["net_growth_bytes"], 430063, "independent net growth")
     check_report(args.report, expected)
     if args.same is not None:
         check_report(args.same, report_expected(
