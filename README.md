@@ -1,5 +1,7 @@
 # rootfs-diff
 
+[![Latest release](https://img.shields.io/github/v/release/Azhovan/rootfs-diff)](https://github.com/Azhovan/rootfs-diff/releases/latest) [![CI status on main](https://github.com/Azhovan/rootfs-diff/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Azhovan/rootfs-diff/actions/workflows/ci.yml?query=branch%3Amain) [![Apache-2.0 license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE) [![Go package documentation](https://pkg.go.dev/badge/github.com/Azhovan/rootfs-diff.svg)](https://pkg.go.dev/github.com/Azhovan/rootfs-diff)
+
 rootfs-diff compares two embedded Linux root filesystem (rootfs) archives and shows what changed between releases. Use it as a command-line tool or a Go library.
 
 Supply complete tar or tar.gz archives from Buildroot, Yocto or any build system that produces a supported archive. rootfs-diff reads the file contents and metadata stored in each archive without extracting files or running their contents. It writes text, JSON or Markdown reports. The same logical inputs and options produce identical report bytes.
